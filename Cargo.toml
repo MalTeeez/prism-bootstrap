@@ -3,4 +3,11 @@ name = "mc-headless-launcher"
 version = "0.1.0"
 edition = "2024"
 
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+
 [dependencies]

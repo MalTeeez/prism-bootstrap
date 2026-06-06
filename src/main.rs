@@ -10,12 +10,14 @@ mod load;
 mod merge;
 mod model;
 mod platform;
+mod resolve;
 mod rules;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{LevelFilter, info};
 
+use crate::model::artifact::{ArtifactRecord, Role};
 use crate::model::profile::{GameArgs, Profile};
 use crate::platform::Ctx;
 
@@ -46,28 +48,40 @@ fn init_logging() -> Result<()> {
 }
 
 /// The pipeline so far: load -> merge -> summarise, and (if a platform is given)
-/// report how the rules gate the libraries for that target.
+/// resolve the artifacts for that target and report their roles.
 fn run(args: &cli::Args) -> Result<()> {
     let patches = load::load_instance(args.instance_dir.as_path())?;
     let profile = merge::merge(&patches);
     log_summary(&profile);
 
     if let Some(platform) = args.platform {
-        report_platform(&profile, &platform::expand_platform(platform));
+        let ctx = platform::expand_platform(platform);
+        let records = resolve::resolve(&profile, &ctx, args.instance_dir.as_path())
+            .context("resolving artifacts for the target platform")?;
+        report_resolution(&ctx, &records);
     }
     Ok(())
 }
 
-/// Report the resolved target and how many libraries its rules admit. A preview
-/// of the phase-3 filter step, exercising `expand_platform` + `allowed`.
-fn report_platform(profile: &Profile, ctx: &Ctx) {
+/// Report the resolved target and a per-role breakdown of its artifacts. The
+/// downloads themselves land in phase 4.
+fn report_resolution(ctx: &Ctx, records: &[ArtifactRecord]) {
     info!("Target platform: {} (os {}, arch {})", ctx.os_token, ctx.os_name, ctx.arch);
-    let admitted = profile
-        .libraries
-        .iter()
-        .filter(|library| rules::allowed(library.rules.as_deref().unwrap_or(&[]), ctx))
-        .count();
-    info!(" - {admitted} of {} libraries apply to this platform", profile.libraries.len());
+    let (mut classpath, mut natives, mut maven, mut no_url) = (0, 0, 0, 0);
+    for record in records {
+        match record.role {
+            Role::Classpath => classpath += 1,
+            Role::NativeExtract => natives += 1,
+            Role::MavenFile => maven += 1,
+            Role::NoUrl => no_url += 1,
+            Role::Asset => {}
+        }
+    }
+    info!(
+        " - {} artifacts: {classpath} classpath, {natives} native-extract, \
+         {maven} maven-file, {no_url} no-url (assume-local)",
+        records.len()
+    );
 }
 
 /// Log a one-glance summary of the merged profile.

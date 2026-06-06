@@ -9,6 +9,7 @@
 //! the not-yet-consumed fields are deliberately allowed rather than removed.
 #![allow(dead_code)]
 
+pub mod artifact;
 pub mod pack;
 pub mod patch;
 pub mod profile;

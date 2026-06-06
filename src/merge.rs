@@ -10,6 +10,7 @@ use log::{info, warn};
 
 use crate::model::patch::{Arguments, Library, Patch};
 use crate::model::profile::{GameArgs, Profile};
+use crate::resolve::artifact_key;
 
 /// Fold sorted `patches` into a merged [`Profile`].
 #[must_use]
@@ -109,19 +110,10 @@ fn apply_game_args(profile: &mut Profile, patch: &Patch) {
 }
 
 /// Remove every library whose `group:artifact` matches `name`'s, preserving the
-/// order of the survivors.
+/// order of the survivors. (`artifact_key` is shared with `resolve`'s dedup.)
 fn remove_library(libraries: &mut Vec<Library>, name: &str) {
     let target = artifact_key(name);
     libraries.retain(|library| artifact_key(&library.name) != target);
-}
-
-/// The `group:artifact` prefix of a maven coordinate - the first two
-/// colon-separated segments, ignoring any version/classifier that follow.
-fn artifact_key(name: &str) -> &str {
-    match name.match_indices(':').nth(1) {
-        Some((idx, _)) => &name[..idx],
-        None => name,
-    }
 }
 
 #[cfg(test)]

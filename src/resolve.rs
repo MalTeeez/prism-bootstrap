@@ -273,8 +273,12 @@ fn normalize_sha1(sha1: Option<&str>) -> Option<String> {
 }
 
 /// Make the instance dir absolute (without requiring it to exist yet) so the
-/// resolved `local_path`s are absolute for phase 6 to join directly.
-fn absolute_instance_dir(instance_dir: &Path) -> Result<PathBuf> {
+/// resolved `local_path`s are absolute for phase 6 to join directly. Idempotent
+/// on an already-absolute path, so callers may pre-absolutize and share it.
+///
+/// # Errors
+/// Returns an error if the current directory cannot be read.
+pub fn absolute_instance_dir(instance_dir: &Path) -> Result<PathBuf> {
     if instance_dir.is_absolute() {
         Ok(instance_dir.to_path_buf())
     } else {

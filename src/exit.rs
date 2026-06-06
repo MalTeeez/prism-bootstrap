@@ -6,6 +6,9 @@
 //! reach us are IO/parse failures from `load`, so the mapping is a stub that
 //! returns [`ExitCode::IoError`].
 
+use std::fmt;
+use std::path::PathBuf;
+
 use anyhow::Error;
 
 /// A process exit code, one per failure class.
@@ -40,12 +43,45 @@ impl ExitCode {
     }
 }
 
+/// A failure whose exit code is meaningful. Downloader/preflight
+/// code returns these so [`exit_code_for`] can map them to a distinct code;
+/// everything else falls through to [`ExitCode::IoError`].
+#[derive(Debug)]
+pub enum FatalError {
+    /// A no-url (`MMC-hint: local`) artifact is not present on disk.
+    MissingLocalLib { coordinate: String, path: PathBuf },
+    /// A download failed or a SHA-1/size mismatch survived all retries.
+    DownloadFailed { coordinate: String, reason: String },
+}
+
+impl fmt::Display for FatalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FatalError::MissingLocalLib { coordinate, path } => write!(
+                f,
+                "no-url library {coordinate} is not present at {} \
+                 (place it under libraries/ before running - the tool never \
+                 fetches no-url entries)",
+                path.display()
+            ),
+            FatalError::DownloadFailed { coordinate, reason } => {
+                write!(f, "failed to download {coordinate}: {reason}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for FatalError {}
+
 /// Map a top-level error to an exit code.
 ///
-/// Phase 1 only produces IO/parse errors, so everything maps to
-/// [`ExitCode::IoError`]. Later phases attach typed errors and downcast here to
-/// return the specific codes above.
+/// Typed [`FatalError`]s (anywhere in the context chain) map to their specific
+/// code; anything else is an IO/parse failure -> [`ExitCode::IoError`].
 #[must_use]
-pub fn exit_code_for(_error: &Error) -> ExitCode {
-    ExitCode::IoError
+pub fn exit_code_for(error: &Error) -> ExitCode {
+    match error.downcast_ref::<FatalError>() {
+        Some(FatalError::MissingLocalLib { .. }) => ExitCode::MissingLocalLib,
+        Some(FatalError::DownloadFailed { .. }) => ExitCode::DownloadFailed,
+        None => ExitCode::IoError,
+    }
 }

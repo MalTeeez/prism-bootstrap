@@ -21,4 +21,16 @@ pub struct Args {
     /// Required once the resolve/emit phases land; optional for now.
     #[arg(long, value_enum)]
     pub platform: Option<Platform>,
+
+    /// Maximum parallel downloads.
+    #[arg(long, default_value_t = 16)]
+    pub jobs: usize,
+
+    /// Skip SHA-1/size verification (faster re-runs).
+    #[arg(long)]
+    pub no_verify: bool,
+
+    /// Resolve + preflight only; perform no downloads.
+    #[arg(long)]
+    pub dry_run: bool,
 }

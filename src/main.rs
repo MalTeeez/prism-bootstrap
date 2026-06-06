@@ -4,7 +4,9 @@
 //! Today the pipeline only loads + merges an instance and logs a summary of the
 //! resulting profile; the resolve/download/assemble stages land in later phases.
 
+mod assets;
 mod cli;
+mod download;
 mod exit;
 mod load;
 mod merge;
@@ -17,18 +19,20 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use log::{LevelFilter, info};
 
+use crate::download::{DownloadOptions, Downloader};
 use crate::model::artifact::{ArtifactRecord, Role};
 use crate::model::profile::{GameArgs, Profile};
 use crate::platform::Ctx;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     if let Err(error) = init_logging() {
         eprintln!("failed to initialise logging: {error:?}");
         std::process::exit(exit::ExitCode::IoError.code());
     }
 
     let args = cli::Args::parse();
-    match run(&args) {
+    match run(&args).await {
         Ok(()) => std::process::exit(exit::ExitCode::Ok.code()),
         Err(error) => {
             // Log the full context chain so the cause is visible to the user.
@@ -47,19 +51,36 @@ fn init_logging() -> Result<()> {
         .context("initialising the logger")
 }
 
-/// The pipeline so far: load -> merge -> summarise, and (if a platform is given)
-/// resolve the artifacts for that target and report their roles.
-fn run(args: &cli::Args) -> Result<()> {
+/// The pipeline so far: load -> merge -> resolve -> download (libraries + assets).
+/// Without a `--platform` we stop after the merge summary (resolution needs a
+/// target).
+async fn run(args: &cli::Args) -> Result<()> {
     let patches = load::load_instance(args.instance_dir.as_path())?;
     let profile = merge::merge(&patches);
     log_summary(&profile);
 
-    if let Some(platform) = args.platform {
-        let ctx = platform::expand_platform(platform);
-        let records = resolve::resolve(&profile, &ctx, args.instance_dir.as_path())
-            .context("resolving artifacts for the target platform")?;
-        report_resolution(&ctx, &records);
+    let Some(platform) = args.platform else {
+        return Ok(());
+    };
+    let ctx = platform::expand_platform(platform);
+    let instance = resolve::absolute_instance_dir(args.instance_dir.as_path())?;
+    let records = resolve::resolve(&profile, &ctx, &instance)
+        .context("resolving artifacts for the target platform")?;
+    report_resolution(&ctx, &records);
+
+    let downloader = Downloader::new(DownloadOptions {
+        jobs: args.jobs,
+        verify: !args.no_verify,
+        dry_run: args.dry_run,
+    })
+    .context("initialising the downloader")?;
+
+    downloader.download_all("libraries", &records).await?;
+    if let Some(asset_index) = &profile.asset_index {
+        assets::download_assets(&downloader, asset_index, &instance).await?;
     }
+
+    info!("All artifacts present for {}.", ctx.os_token);
     Ok(())
 }
 

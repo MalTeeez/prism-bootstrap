@@ -247,11 +247,12 @@ mod tests {
         );
     }
 
-    /// End-to-end fold of the bundled lwjgl3ify 1.7.10 fixture.
+    /// End-to-end fold of the bundled lwjgl3ify 1.7.10 instance variant
+    /// (`example-files/lwjgl3ify-variant`, the one with full patches).
     #[test]
     fn example_files_fold_matches_expected_profile() {
-        let patches = load_instance(Path::new("example-files"))
-            .expect("bundled example-files should load");
+        let patches = load_instance(Path::new("example-files/lwjgl3ify-variant"))
+            .expect("bundled lwjgl3ify-variant should load");
 
         // Loaded and sorted by order: net.minecraft(-2), org.lwjgl3(-1),
         // forgepatches(3), net.minecraftforge(5), launchargs(100).

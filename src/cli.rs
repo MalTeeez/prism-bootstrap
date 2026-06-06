@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use crate::platform::Platform;
+
 /// Resolve a MultiMC/Prism instance into a runnable `java` command.
 #[derive(Debug, Parser)]
 #[command(name = "mc-headless-launcher")]
@@ -15,7 +17,8 @@ pub struct Args {
     /// Instance directory containing `mmc-pack.json` and `patches/`.
     pub instance_dir: PathBuf,
 
-    /// Target platform token (validated and consumed in a later phase).
-    #[arg(long)]
-    pub platform: Option<String>,
+    /// Target platform token, validated against the fixed list. Optional: when
+    /// Required once the resolve/emit phases land; optional for now.
+    #[arg(long, value_enum)]
+    pub platform: Option<Platform>,
 }

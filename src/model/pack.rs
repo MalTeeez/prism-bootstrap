@@ -36,3 +36,93 @@ pub struct PackComponent {
     #[serde(default)]
     pub dependency_only: Option<bool>,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// Parse the `mmc-pack.json` of one `example-files/<variant>`.
+    fn parse_variant(variant: &str) -> Pack {
+        let path = Path::new("example-files").join(variant).join("mmc-pack.json");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+        serde_json::from_str(&content)
+            .unwrap_or_else(|e| panic!("parsing {}: {e}", path.display()))
+    }
+
+    /// The component uids of a pack, in declaration order.
+    fn uids(pack: &Pack) -> Vec<&str> {
+        pack.components.iter().map(|c| c.uid.as_str()).collect()
+    }
+
+    /// Find a component by uid (every fixture uid is unique).
+    fn component<'a>(pack: &'a Pack, uid: &str) -> &'a PackComponent {
+        pack.components
+            .iter()
+            .find(|c| c.uid == uid)
+            .unwrap_or_else(|| panic!("component {uid} missing"))
+    }
+
+    #[test]
+    fn lwjgl3ify_variant_pack_parses() {
+        // The legacy-args GTNH example (LWJGL3 swap), the only variant with
+        // full patches; the end-to-end fold lives in `merge`.
+        let pack = parse_variant("lwjgl3ify-variant");
+        assert_eq!(pack.format_version, Some(1));
+        assert_eq!(
+            uids(&pack),
+            [
+                "org.lwjgl3",
+                "net.minecraft",
+                "me.eigenraven.lwjgl3ify.forgepatches",
+                "net.minecraftforge",
+                "me.eigenraven.lwjgl3ify.launchargs",
+            ]
+        );
+    }
+
+    #[test]
+    fn modern_mc_variant_pack_parses() {
+        // Plain modern vanilla: just LWJGL3 + Minecraft.
+        let pack = parse_variant("modern-mc-variant");
+        assert_eq!(uids(&pack), ["org.lwjgl3", "net.minecraft"]);
+        assert_eq!(component(&pack, "org.lwjgl3").dependency_only, Some(true));
+        assert_eq!(component(&pack, "net.minecraft").important, Some(true));
+    }
+
+    #[test]
+    fn modern_fabric_variant_pack_parses() {
+        // Modern vanilla + a Fabric loader stack (intermediary mappings +
+        // loader). Exercises dependency-only loader components.
+        let pack = parse_variant("modern-fabric-variant");
+        assert_eq!(
+            uids(&pack),
+            [
+                "org.lwjgl3",
+                "net.minecraft",
+                "net.fabricmc.intermediary",
+                "net.fabricmc.fabric-loader",
+            ]
+        );
+        assert_eq!(
+            component(&pack, "net.fabricmc.intermediary").dependency_only,
+            Some(true)
+        );
+        // The loader itself is a real (non-dependency-only) component.
+        assert_eq!(
+            component(&pack, "net.fabricmc.fabric-loader").dependency_only,
+            None
+        );
+    }
+
+    #[test]
+    fn old_mc_variant_pack_parses_with_lwjgl2() {
+        // Legacy 1.7.10 + Forge on LWJGL2 (`org.lwjgl`, not `org.lwjgl3`) -
+        // the classic-natives-extract instance type.
+        let pack = parse_variant("old-mc-variant");
+        assert_eq!(uids(&pack), ["org.lwjgl", "net.minecraft", "net.minecraftforge"]);
+        assert_eq!(component(&pack, "org.lwjgl").dependency_only, Some(true));
+    }
+}

@@ -9,12 +9,15 @@ mod exit;
 mod load;
 mod merge;
 mod model;
+mod platform;
+mod rules;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use log::{LevelFilter, info};
 
 use crate::model::profile::{GameArgs, Profile};
+use crate::platform::Ctx;
 
 fn main() {
     if let Err(error) = init_logging() {
@@ -42,12 +45,29 @@ fn init_logging() -> Result<()> {
         .context("initialising the logger")
 }
 
-/// The phase-1 pipeline: load -> merge -> summarise.
+/// The pipeline so far: load -> merge -> summarise, and (if a platform is given)
+/// report how the rules gate the libraries for that target.
 fn run(args: &cli::Args) -> Result<()> {
     let patches = load::load_instance(args.instance_dir.as_path())?;
     let profile = merge::merge(&patches);
     log_summary(&profile);
+
+    if let Some(platform) = args.platform {
+        report_platform(&profile, &platform::expand_platform(platform));
+    }
     Ok(())
+}
+
+/// Report the resolved target and how many libraries its rules admit. A preview
+/// of the phase-3 filter step, exercising `expand_platform` + `allowed`.
+fn report_platform(profile: &Profile, ctx: &Ctx) {
+    info!("Target platform: {} (os {}, arch {})", ctx.os_token, ctx.os_name, ctx.arch);
+    let admitted = profile
+        .libraries
+        .iter()
+        .filter(|library| rules::allowed(library.rules.as_deref().unwrap_or(&[]), ctx))
+        .count();
+    info!(" - {admitted} of {} libraries apply to this platform", profile.libraries.len());
 }
 
 /// Log a one-glance summary of the merged profile.

@@ -20,7 +20,7 @@ use tokio::sync::Semaphore;
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::exit::FatalError;
-use crate::model::artifact::ArtifactRecord;
+use crate::model::artifact::{ArtifactRecord, Role};
 
 /// Total attempts per artifact before a download is declared fatal.
 const MAX_ATTEMPTS: u32 = 4;
@@ -156,7 +156,12 @@ async fn download_one(
         return Ok(());
     }
 
-    let bytes = fetch_with_retries(client, url, record, options).await?;
+    let bytes = fetch_retrying(client, url, record, options)
+        .await
+        .map_err(|reason| FatalError::DownloadFailed {
+            coordinate: record.coordinate.clone(),
+            reason,
+        })?;
     write_atomic(&record.local_path, &bytes)
         .await
         .with_context(|| format!("writing {}", record.local_path.display()))
@@ -184,13 +189,17 @@ fn assert_local(record: &ArtifactRecord, dry_run: bool) -> Result<()> {
     .into())
 }
 
-/// Fetch with bounded retries + backoff; a surviving failure is fatal.
-async fn fetch_with_retries(
+/// Run [`fetch_once`] up to [`MAX_ATTEMPTS`] times with backoff. Returns the
+/// bytes, or the last attempt's message on exhaustion - the caller maps that to
+/// its own fatal error. Shared by the artifact path (-> `DownloadFailed`) and
+/// [`Fetcher::fetch_bytes`] (meta version files), so meta JSON flows through the
+/// one HTTP path.
+async fn fetch_retrying(
     client: &reqwest::Client,
     url: &str,
     record: &ArtifactRecord,
     options: &DownloadOptions,
-) -> Result<Vec<u8>> {
+) -> Result<Vec<u8>, String> {
     let mut last_message = String::new();
     for attempt in 1..=MAX_ATTEMPTS {
         match fetch_once(client, url, record, options).await {
@@ -209,11 +218,48 @@ async fn fetch_with_retries(
             }
         }
     }
-    Err(FatalError::DownloadFailed {
-        coordinate: record.coordinate.clone(),
-        reason: last_message,
+    Err(last_message)
+}
+
+/// A minimal "fetch some bytes from a URL" capability. Callers that only need
+/// raw bytes (the meta resolver, phase 4.5) depend on this rather than the whole
+/// [`Downloader`], which also lets them be unit-tested with a recorded in-memory
+/// fetcher (keeping `cargo test` offline).
+// Internal trait: the futures are awaited in-task (never spawned), so the Send
+// bound `async fn` warns about is not needed here.
+#[allow(async_fn_in_trait)]
+pub trait Fetcher {
+    /// Fetch `url` into memory with retries/backoff, without sha1
+    /// verification or any disk write; `label` names the thing for log/error
+    /// messages. Not gated by `--dry-run`/`--no-verify` (meta JSON is input we
+    /// need, not an artifact download).
+    ///
+    /// # Errors
+    /// Returns an error if every attempt fails (transport, non-success HTTP, or
+    /// a surviving 5xx); the message records the last failure, so a 404 reads as
+    /// `HTTP 404 ...` and a transport error as `request error: ...`.
+    async fn fetch_bytes(&self, url: &str, label: &str) -> Result<Vec<u8>>;
+}
+
+impl Fetcher for Downloader {
+    async fn fetch_bytes(&self, url: &str, label: &str) -> Result<Vec<u8>> {
+        // Synthesize a hash-less, size-less record so verification is a no-op
+        // (verify_bytes returns Ok with no sha1/size); the label rides along as
+        // the coordinate for the retry/log messages. The record's role/path are
+        // unused - meta bytes are parsed in memory, never written.
+        let record = ArtifactRecord {
+            coordinate: label.to_owned(),
+            url: Some(url.to_owned()),
+            sha1: None,
+            size: None,
+            local_path: PathBuf::new(),
+            role: Role::Classpath,
+            extract_exclude: Vec::new(),
+        };
+        fetch_retrying(&self.client, url, &record, &self.options)
+            .await
+            .map_err(anyhow::Error::msg)
     }
-    .into())
 }
 
 /// One fetch attempt: GET, classify the status, read, and verify.

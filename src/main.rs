@@ -13,6 +13,7 @@ mod exit;
 mod java;
 mod load;
 mod merge;
+mod meta;
 mod model;
 mod natives;
 mod platform;
@@ -55,12 +56,27 @@ fn init_logging() -> Result<()> {
         .context("initialising the logger")
 }
 
-/// The full pipeline: load, merge, preflight, resolve, download (libraries and
-/// assets), extract natives, select java, assemble, and emit. Without a
-/// `--platform` we stop after the merge summary (everything downstream needs a
-/// target).
+/// The full pipeline: load, resolve any pack-only components from the meta
+/// server, merge, preflight, resolve artifacts, download (libraries and assets),
+/// extract natives, select java, assemble, and emit. Without a `--platform` we
+/// stop after the merge summary (everything downstream needs a target).
 async fn run(args: &cli::Args) -> Result<()> {
-    let patches = load::load_instance(args.instance_dir.as_path())?;
+    let components = load::load_components(args.instance_dir.as_path())?;
+
+    // Build the HTTP client once, up front: meta resolution (next) and the
+    // artifact downloads (later) share this one downloader.
+    let downloader = Downloader::new(DownloadOptions {
+        jobs: args.jobs,
+        verify: !args.no_verify,
+        dry_run: args.dry_run,
+    })
+    .context("initialising the downloader")?;
+
+    // Fill in any pack-only components from the meta server (opt-in via
+    // --meta-url); a gap without --meta-url fails with a provisioning hint.
+    let patches = meta::resolve_components(components, &downloader, args.meta_url.as_deref())
+        .await
+        .context("resolving components")?;
     let profile = merge::merge(&patches);
     log_summary(&profile);
 
@@ -77,13 +93,6 @@ async fn run(args: &cli::Args) -> Result<()> {
     let records = resolve::resolve(&profile, &ctx, &instance)
         .context("resolving artifacts for the target platform")?;
     report_resolution(&ctx, &records);
-
-    let downloader = Downloader::new(DownloadOptions {
-        jobs: args.jobs,
-        verify: !args.no_verify,
-        dry_run: args.dry_run,
-    })
-    .context("initialising the downloader")?;
 
     downloader.download_all("libraries", &records).await?;
     if let Some(asset_index) = &profile.asset_index {

@@ -86,4 +86,12 @@ pub struct Args {
     /// Where to write `launch.argv`. Default `<instance>/launch.argv`.
     #[arg(long, value_name = "PATH")]
     pub emit: Option<PathBuf>,
+
+    /// Meta base URL to resolve components that have no local
+    /// `patches/<uid>.json` (e.g. `https://meta.prismlauncher.org/v1/`). When
+    /// omitted, a component with no local patch is a hard error - the tool never
+    /// reaches the network for a patch you didn't point it at. Also accepts a
+    /// mirror / air-gap base. Opt-in by design - there is no default.
+    #[arg(long, value_name = "URL")]
+    pub meta_url: Option<String>,
 }

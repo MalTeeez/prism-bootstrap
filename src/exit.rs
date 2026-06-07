@@ -33,6 +33,10 @@ pub enum ExitCode {
     DownloadFailed = 6,
     /// Any IO/parse failure (also the current catch-all).
     IoError = 7,
+    /// A listed component has no local patch and no `--meta-url` was given.
+    MissingComponent = 8,
+    /// Resolving a component from the meta server failed (404/transport/parse).
+    MetaResolveFailed = 9,
 }
 
 impl ExitCode {
@@ -56,6 +60,12 @@ pub enum FatalError {
     NoMainClass,
     /// A `requires`/`conflicts` dependency constraint is not satisfied.
     UnsatisfiedDeps { reason: String },
+    /// A listed component has no local `patches/<uid>.json` and meta resolution
+    /// was not requested (no `--meta-url`) or could not pin a version.
+    MissingComponent { uid: String, version: Option<String>, patch_path: PathBuf },
+    /// Fetching/parsing a component's version file from the meta server failed:
+    /// a 404 (not published), a surviving transport error, or invalid JSON.
+    MetaResolveFailed { uid: String, version: String, reason: String },
 }
 
 impl fmt::Display for FatalError {
@@ -79,6 +89,29 @@ impl fmt::Display for FatalError {
             FatalError::UnsatisfiedDeps { reason } => {
                 write!(f, "unsatisfied component dependency: {reason}")
             }
+            FatalError::MissingComponent { uid, version, patch_path } => {
+                // Name the version (or note it's unpinned) and both fixes: drop
+                // the patch in, or point the tool at the meta server.
+                let version_note = match version {
+                    Some(version) => format!(" ({version})"),
+                    None => " (no version pinned in mmc-pack.json)".to_owned(),
+                };
+                write!(
+                    f,
+                    "component '{uid}'{version_note} has no local patch at {} - \
+                     provide that file, or pass \
+                     --meta-url https://meta.prismlauncher.org/v1/ to fetch it \
+                     from the Prism meta server",
+                    patch_path.display()
+                )
+            }
+            FatalError::MetaResolveFailed { uid, version, reason } => {
+                write!(
+                    f,
+                    "failed to resolve component '{uid}' ({version}) from the \
+                     meta server: {reason}"
+                )
+            }
         }
     }
 }
@@ -96,6 +129,8 @@ pub fn exit_code_for(error: &Error) -> ExitCode {
         Some(FatalError::DownloadFailed { .. }) => ExitCode::DownloadFailed,
         Some(FatalError::NoMainClass) => ExitCode::BadMainClass,
         Some(FatalError::UnsatisfiedDeps { .. }) => ExitCode::UnsatisfiedDeps,
+        Some(FatalError::MissingComponent { .. }) => ExitCode::MissingComponent,
+        Some(FatalError::MetaResolveFailed { .. }) => ExitCode::MetaResolveFailed,
         None => ExitCode::IoError,
     }
 }

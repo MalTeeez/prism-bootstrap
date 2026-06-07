@@ -213,7 +213,16 @@ The caller then does, e.g., `env $(cat launch.env | xargs) xvfb-run -a <command>
 ## 5. The component model (the conceptual core)
 
 Every patch is a **component** with a `uid`, `version`, and integer `order`. The
-launcher sorts by `order` ascending and folds them into one launch profile:
+launcher folds them into one launch profile **in `mmc-pack.json` declaration
+(array) order**:
+
+> **Correction (verified against a real Prism launch command, 2026-06-07).** The
+> effective order is the `components[]` **array order**, *not* a sort by the
+> patch `order` field. In the example pack `org.lwjgl3` (order -1) precedes
+> `net.minecraft` (order -2) in the array, and that is exactly the order Prism
+> puts them on the classpath. The `order` field is informational; treat the array
+> as authoritative. (The "sort by `order`" wording elsewhere in this doc predates
+> this finding.)
 
 | Field                | Merge behavior                                              |
 |----------------------|-------------------------------------------------------------|
@@ -439,7 +448,7 @@ Feature flags default false. Feed `ctx` into `allowed()`.
 ## 8. Module architecture
 
 ```
-load        read mmc-pack.json + each patches/<uid>.json; sort by `order`
+load        read mmc-pack.json + each patches/<uid>.json; keep array order (NOT `order`)
 merge       fold components -> profile: libraries(+/-), mavenFiles, mainJar,
             assetIndex, mainClass(last-wins), minecraftArguments|arguments,
             +jvmArgs, +tweakers, +traits, +agents
@@ -489,7 +498,7 @@ assert local presence).
 ## 10. Assembly algorithm (pseudocode)
 
 ```
-profile = merge(sorted(components, key=order))
+profile = merge(components)        # mmc-pack array order, NOT sorted by `order`
 ctx     = expand_platform(args.platform)        # required token -> ctx
 
 cp, maven_only, natives_to_extract = [], [], []

@@ -356,6 +356,7 @@ mod tests {
             size,
             local_path: path,
             role,
+            extract_exclude: Vec::new(),
         }
     }
 
@@ -449,6 +450,7 @@ mod tests {
             size: Some(size),
             local_path: dir.join(format!("{}.jar", coordinate.replace(':', "_"))),
             role: Role::Classpath,
+            extract_exclude: Vec::new(),
         }
     }
 

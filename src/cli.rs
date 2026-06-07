@@ -33,4 +33,19 @@ pub struct Args {
     /// Resolve + preflight only; perform no downloads.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Adjust internals for a no-GPU/virtual-display context. Among other
+    /// things, skips extracting input-device natives.
+    #[arg(long)]
+    pub headless: bool,
+
+    /// Force-extract a native whose coordinate contains this pattern, overriding
+    /// the headless skip-list. Repeatable.
+    #[arg(long, value_name = "PATTERN")]
+    pub keep_natives: Vec<String>,
+
+    /// Force-skip extracting a native whose coordinate contains this pattern.
+    /// Repeatable.
+    #[arg(long, value_name = "PATTERN")]
+    pub skip_natives: Vec<String>,
 }

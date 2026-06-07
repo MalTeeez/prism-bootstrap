@@ -34,8 +34,11 @@ pub fn load_instance(instance_dir: &Path) -> Result<Vec<Patch>> {
         patches.push(read_patch(&patch_path, &component.uid)?);
     }
 
-    // Stable sort: ties keep manifest declaration order.
-    patches.sort_by_key(|patch| patch.order);
+    // Keep mmc-pack.json declaration (array) order - that is what the launcher
+    // folds in, NOT the patch `order` field. Confirmed against a real Prism
+    // launch command: components appear on the classpath in array order
+    // (e.g. org.lwjgl3 before net.minecraft, despite order -1 vs -2). The
+    // `order` field is informational. See the phase-1 decisions log.
     info!("Loaded {} component(s)", patches.len());
     Ok(patches)
 }

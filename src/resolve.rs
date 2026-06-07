@@ -104,6 +104,7 @@ fn classify_library(
             size: artifact.size,
             local_path,
             role: Role::Classpath,
+            extract_exclude: Vec::new(),
         }));
     }
 
@@ -118,10 +119,19 @@ fn classify_library(
             size: None,
             local_path,
             role: Role::Classpath,
+            extract_exclude: Vec::new(),
         }));
     }
 
     // (d) no resolvable url -> assume-local; phase 4 asserts it (never fetch).
+    // `MMC-hint: "local"` jars live flat in the instance's libraries dir
+    // (matching MultiMC/Prism - confirmed against a real launch log), not under
+    // the maven layout the downloaded libs use.
+    let local_path = if library.mmc_hint.as_deref() == Some("local") {
+        libraries_dir.join(maven_filename(&library.name)?)
+    } else {
+        local_path
+    };
     Ok(Some(ArtifactRecord {
         coordinate: library.name.clone(),
         url: None,
@@ -129,6 +139,7 @@ fn classify_library(
         size: None,
         local_path,
         role: Role::NoUrl,
+        extract_exclude: Vec::new(),
     }))
 }
 
@@ -162,6 +173,9 @@ fn classify_legacy_native(
     // through the same path function as everything else.
     let coordinate = format!("{}:{classifier}", library.name);
     let local_path = libraries_dir.join(maven_coordinate_to_path(&coordinate)?);
+    // Carry the library's extract.exclude onto the record for phase 5.
+    let extract_exclude =
+        library.extract.as_ref().map_or_else(Vec::new, |extract| extract.exclude.clone());
     Ok(Some(ArtifactRecord {
         url: artifact.url.as_ref().filter(|url| !url.is_empty()).cloned(),
         sha1: normalize_sha1(artifact.sha1.as_deref()),
@@ -169,6 +183,7 @@ fn classify_legacy_native(
         local_path,
         role: Role::NativeExtract,
         coordinate,
+        extract_exclude,
     }))
 }
 
@@ -190,6 +205,7 @@ fn classify_main_jar(main_jar: &MainJar, instance_dir: &Path) -> Result<Artifact
         size: artifact.and_then(|a| a.size),
         local_path,
         role: Role::Classpath,
+        extract_exclude: Vec::new(),
     })
 }
 
@@ -233,13 +249,18 @@ pub fn maven_coordinate_to_path(name: &str) -> Result<PathBuf> {
 fn maven_relative_path(name: &str) -> Result<String> {
     let coordinate = parse_coordinate(name)?;
     let group_path = coordinate.group.replace('.', "/");
-    let file = match coordinate.classifier {
-        Some(classifier) => {
-            format!("{}-{}-{classifier}.jar", coordinate.artifact, coordinate.version)
-        }
-        None => format!("{}-{}.jar", coordinate.artifact, coordinate.version),
-    };
-    Ok(format!("{group_path}/{}/{}/{file}", coordinate.artifact, coordinate.version))
+    Ok(format!(
+        "{group_path}/{}/{}/{}",
+        coordinate.artifact,
+        coordinate.version,
+        coordinate.filename()
+    ))
+}
+
+/// The bare jar filename (`artifact-version[-classifier].jar`) - used for
+/// `MMC-hint: local` jars, which live flat in the instance's libraries dir.
+fn maven_filename(name: &str) -> Result<String> {
+    Ok(parse_coordinate(name)?.filename())
 }
 
 /// A parsed maven coordinate (borrows from the input name).
@@ -248,6 +269,16 @@ struct Coordinate<'a> {
     artifact: &'a str,
     version: &'a str,
     classifier: Option<&'a str>,
+}
+
+impl Coordinate<'_> {
+    /// The jar filename: `artifact-version[-classifier].jar`.
+    fn filename(&self) -> String {
+        match self.classifier {
+            Some(classifier) => format!("{}-{}-{classifier}.jar", self.artifact, self.version),
+            None => format!("{}-{}.jar", self.artifact, self.version),
+        }
+    }
 }
 
 /// Split `group:artifact:version[:classifier]` into its parts.
@@ -388,9 +419,22 @@ mod tests {
 
         assert_eq!(record.role, Role::NoUrl);
         assert_eq!(record.url, None);
-        assert!(record.local_path.ends_with(
-            "com/github/GTNewHorizons/lwjgl3ify/3.0.23/lwjgl3ify-3.0.23-forgePatches.jar"
-        ));
+        // `MMC-hint: local` jars live flat in <instance>/libraries/, matching
+        // MultiMC/Prism - not under the maven layout.
+        assert!(record.local_path.ends_with("libraries/lwjgl3ify-3.0.23-forgePatches.jar"));
+    }
+
+    #[test]
+    fn no_url_without_local_hint_keeps_maven_path() {
+        // A url-less entry that is *not* MMC-hint:local stays on the maven layout
+        // (the flat placement is specific to the local hint).
+        let bare = library(r#"{ "name": "org.example:thing:1.0" }"#);
+        let ctx = expand_platform(Platform::Linux);
+        let record = classify_library(&bare, &ctx, Path::new("/inst/libraries"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.role, Role::NoUrl);
+        assert!(record.local_path.ends_with("org/example/thing/1.0/thing-1.0.jar"));
     }
 
     #[test]

@@ -1,10 +1,10 @@
 //! Fold the sorted component patches into one [`Profile`].
 //!
-//! The merge is pure and order-sensitive: callers must pass patches already
-//! sorted ascending by `order` (that's what `load` returns). Accumulating
-//! fields preserve component-then-declaration order; "last-wins" fields take
-//! the value from the highest-`order` component that set them, which - given
-//! the ascending input - is simply the last one seen.
+//! The merge is pure and order-sensitive: callers pass patches in mmc-pack.json
+//! declaration (array) order - that's what `load` returns, and what the launcher
+//! actually folds in (the patch `order` field is informational; see `load`).
+//! Accumulating fields preserve that order; "last-wins" fields take the value
+//! from the last component in the sequence that sets them.
 
 use log::{info, warn};
 
@@ -43,7 +43,7 @@ fn merge_patch(profile: &mut Profile, patch: &Patch) {
     // mavenFiles accumulate, kept separate from the classpath libraries.
     profile.maven_files.extend(patch.maven_files.iter().cloned());
 
-    // Last-wins fields: ascending order means "later patch overrides".
+    // Last-wins fields: a later component in array order overrides.
     if let Some(main_class) = &patch.main_class {
         profile.main_class = Some(main_class.clone());
     }
@@ -130,17 +130,19 @@ mod tests {
     }
 
     #[test]
-    fn main_class_is_last_wins_by_order() {
-        // Deliberately out of order to prove sorting/last-wins, not file order.
-        let mut patches = vec![
-            patch(r#"{ "uid": "a", "order": 100, "mainClass": "Highest" }"#),
-            patch(r#"{ "uid": "b", "order": -2, "mainClass": "Lowest" }"#),
-            patch(r#"{ "uid": "c", "order": 5, "mainClass": "Middle" }"#),
+    fn main_class_is_last_in_array_order_not_by_order_field() {
+        // merge folds in the given (mmc-pack array) order; the LAST component
+        // that sets mainClass wins. The `order` field must NOT influence this -
+        // "First" has the highest order yet loses; "Last" has a lower order yet
+        // wins because it is last in the sequence.
+        let patches = vec![
+            patch(r#"{ "uid": "a", "order": 100, "mainClass": "First" }"#),
+            patch(r#"{ "uid": "b", "order": -2, "mainClass": "Middle" }"#),
+            patch(r#"{ "uid": "c", "order": 5, "mainClass": "Last" }"#),
         ];
-        patches.sort_by_key(|p| p.order);
 
         let profile = merge(&patches);
-        assert_eq!(profile.main_class.as_deref(), Some("Highest"));
+        assert_eq!(profile.main_class.as_deref(), Some("Last"));
     }
 
     #[test]
@@ -246,14 +248,14 @@ mod tests {
         let patches = load_instance(Path::new("example-files/lwjgl3ify-variant"))
             .expect("bundled lwjgl3ify-variant should load");
 
-        // Loaded and sorted by order: net.minecraft(-2), org.lwjgl3(-1),
-        // forgepatches(3), net.minecraftforge(5), launchargs(100).
+        // Loaded in mmc-pack.json array order (NOT sorted by the `order` field):
+        // org.lwjgl3 before net.minecraft, matching real Prism output.
         let order: Vec<&str> = patches.iter().map(|p| p.uid.as_str()).collect();
         assert_eq!(
             order,
             [
-                "net.minecraft",
                 "org.lwjgl3",
+                "net.minecraft",
                 "me.eigenraven.lwjgl3ify.forgepatches",
                 "net.minecraftforge",
                 "me.eigenraven.lwjgl3ify.launchargs",
@@ -275,7 +277,11 @@ mod tests {
             .map(|p| p.libraries.len() + p.plus_libraries.len())
             .sum();
         assert_eq!(profile.libraries.len(), expected_len);
-        assert_eq!(profile.libraries.first().unwrap().name, "com.mojang:netty:1.8.8");
+        // First lib is org.lwjgl3's first (array order); last is forge's guava 17.0.
+        assert_eq!(
+            profile.libraries.first().unwrap().name,
+            "org.lwjgl:lwjgl-freetype-natives-freebsd:3.4.2-20260602.093430-9"
+        );
         assert_eq!(profile.libraries.last().unwrap().name, "com.google.guava:guava:17.0");
 
         // Single tweaker from forge; trait from launchargs.

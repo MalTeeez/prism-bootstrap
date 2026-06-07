@@ -40,4 +40,8 @@ pub struct ArtifactRecord {
     pub local_path: PathBuf,
     /// The artifact's role (see [`Role`]).
     pub role: Role,
+    /// Path prefixes to skip when unzipping (only meaningful for
+    /// `NativeExtract`; empty otherwise). Carries the library's `extract.exclude`
+    /// so phase 5 can honor it without re-consulting the profile.
+    pub extract_exclude: Vec<String>,
 }

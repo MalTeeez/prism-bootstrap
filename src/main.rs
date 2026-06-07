@@ -11,6 +11,7 @@ mod exit;
 mod load;
 mod merge;
 mod model;
+mod natives;
 mod platform;
 mod resolve;
 mod rules;
@@ -80,7 +81,35 @@ async fn run(args: &cli::Args) -> Result<()> {
         assets::download_assets(&downloader, asset_index, &instance).await?;
     }
 
+    // Extract legacy natives now that their jars are on disk (skipped on a
+    // dry run, where nothing was downloaded).
+    if !args.dry_run {
+        extract_natives(args, &records, &instance).await?;
+    }
+
     info!("All artifacts present for {}.", ctx.os_token);
+    Ok(())
+}
+
+/// Extract legacy natives off the async runtime (the `zip` crate is blocking).
+async fn extract_natives(
+    args: &cli::Args,
+    records: &[ArtifactRecord],
+    instance: &std::path::Path,
+) -> Result<()> {
+    let native_records: Vec<ArtifactRecord> =
+        records.iter().filter(|record| record.role == Role::NativeExtract).cloned().collect();
+    let natives_dir = instance.join("natives");
+    let options = natives::NativeOptions {
+        headless: args.headless,
+        keep: args.keep_natives.clone(),
+        skip: args.skip_natives.clone(),
+    };
+    tokio::task::spawn_blocking(move || {
+        natives::extract_natives(&native_records, &natives_dir, &options)
+    })
+    .await
+    .context("native-extraction task")??;
     Ok(())
 }
 

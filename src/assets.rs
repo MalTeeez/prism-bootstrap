@@ -74,6 +74,7 @@ pub async fn download_assets(
         size: asset_index.size,
         local_path: index_path.clone(),
         role: Role::Asset,
+        extract_exclude: Vec::new(),
     };
     downloader.download_all("asset index", std::slice::from_ref(&index_record)).await?;
 
@@ -114,6 +115,7 @@ fn build_object_records(index: &AssetIndex, assets_dir: &Path) -> Vec<ArtifactRe
                 size: Some(object.size),
                 local_path: objects_dir.join(prefix).join(&object.hash),
                 role: Role::Asset,
+                extract_exclude: Vec::new(),
             })
         })
         .collect()

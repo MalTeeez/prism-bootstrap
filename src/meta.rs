@@ -1,5 +1,4 @@
 //! Resolve pack-only components from `meta.prismlauncher.org`.
-//! 4.5).
 //!
 //! A "pack-only" instance lists components by `uid`+`version` but ships no
 //! `patches/`. For each such gap [`resolve_components`] fetches the component's

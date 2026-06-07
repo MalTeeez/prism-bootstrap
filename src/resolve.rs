@@ -19,7 +19,7 @@ use crate::model::profile::Profile;
 use crate::platform::Ctx;
 use crate::rules::allowed;
 
-/// Resolve a merged profile into the artifact records the IO phases consume.
+/// Resolve a merged profile into the artifact records the IO stages consume.
 ///
 /// Applies rule filtering and order-preserving last-wins dedup, then classifies
 /// each survivor. Output order is: classpath/native libraries (component then
@@ -124,9 +124,9 @@ fn classify_library(
         }));
     }
 
-    // (d) no resolvable url -> assume-local (url: None); phase 4 asserts it on
+    // (d) no resolvable url -> assume-local (url: None); download asserts it on
     // disk and never fetches it. It is still used on the classpath - the
-    // "use it") - the absent url, not the role, marks it assume-local.
+    // absent url, not the role, marks it assume-local.
     // `MMC-hint: "local"` jars live flat in the instance's libraries dir
     // (matching MultiMC/Prism - confirmed against a real launch log), not under
     // the maven layout the downloaded libs use.
@@ -176,7 +176,7 @@ fn classify_legacy_native(
     // through the same path function as everything else.
     let coordinate = format!("{}:{classifier}", library.name);
     let local_path = libraries_dir.join(maven_coordinate_to_path(&coordinate)?);
-    // Carry the library's extract.exclude onto the record for phase 5.
+    // Carry the library's extract.exclude onto the record for natives extraction.
     let extract_exclude =
         library.extract.as_ref().map_or_else(Vec::new, |extract| extract.exclude.clone());
     Ok(Some(ArtifactRecord {
@@ -190,7 +190,7 @@ fn classify_legacy_native(
     }))
 }
 
-/// Classify the main jar to the conventional `versions/<ver>/<ver>.jar` layout
+/// Classify the main jar to the conventional `versions/<ver>/<ver>.jar` layout,
 /// with its url verbatim.
 fn classify_main_jar(main_jar: &MainJar, instance_dir: &Path) -> Result<ArtifactRecord> {
     let coordinate = parse_coordinate(&main_jar.name)?;
@@ -307,7 +307,7 @@ fn normalize_sha1(sha1: Option<&str>) -> Option<String> {
 }
 
 /// Make the instance dir absolute (without requiring it to exist yet) so the
-/// resolved `local_path`s are absolute for phase 6 to join directly. Idempotent
+/// resolved `local_path`s are absolute for the assembler to join directly. Idempotent
 /// on an already-absolute path, so callers may pre-absolutize and share it.
 ///
 /// # Errors

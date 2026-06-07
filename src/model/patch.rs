@@ -69,7 +69,7 @@ pub struct Patch {
     pub maven_files: Vec<Library>,
 
     /// Pre-tokenized JVM args, passed through verbatim. 
-    /// re-split on spaces.
+    /// Never re-split on spaces.
     #[serde(default, rename = "+jvmArgs")]
     pub plus_jvm_args: Vec<String>,
     /// `LaunchWrapper` tweaker classes -> emitted as `--tweakClass`.
@@ -130,7 +130,7 @@ pub struct Library {
     /// Legacy natives extraction directives (`exclude` globs).
     #[serde(default)]
     pub extract: Option<Extract>,
-    /// Platform gating rules; evaluated in phase 2.
+    /// Platform gating rules; evaluated by `rules`.
     #[serde(default)]
     pub rules: Option<Vec<Rule>>,
 }
@@ -185,8 +185,8 @@ pub struct Extract {
     pub exclude: Vec<String>,
 }
 
-/// One Mojang/MMC rule entry; evaluated with allow/disallow semantics in
-/// phase 2.
+/// One Mojang/MMC rule entry; evaluated with allow/disallow semantics by
+/// `rules`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Rule {
     /// `"allow"` or `"disallow"`.

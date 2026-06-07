@@ -1,6 +1,6 @@
 //! `Profile` - the merged result of folding every patch.
 //!
-//! This is the single in-memory contract the later phases consume: an ordered
+//! This is the single in-memory contract the downstream stages consume: an ordered
 //! library list, the resolved last-wins fields, and the accumulated arg /
 //! tweaker / trait / agent sets. It is produced by `merge` and never mutated
 //! after.
@@ -10,7 +10,7 @@ use crate::model::patch::{
 };
 
 /// The game-argument form in effect for a profile. The legacy and modern forms
-/// are never mixed - we track which one the components actually used so phase 6
+/// are never mixed - we track which one the components actually used so assembly
 /// can branch.
 #[derive(Debug, Clone, Default)]
 pub enum GameArgs {
@@ -47,11 +47,10 @@ pub struct Profile {
     pub traits: Vec<String>,
     /// `+agents`, accumulated in order.
     pub agents: Vec<Agent>,
-    /// Collected `compatibleJavaMajors`, order-preserving and deduped, for the
-    /// phase 6 JDK select.
+    /// Collected `compatibleJavaMajors`, order-preserving and deduped, for JDK
+    /// selection.
     pub compatible_java_majors: Vec<u32>,
-    /// Collected `requires`/`conflicts` for the preflight assertion in a later
-    /// phase.
+    /// Collected `requires`/`conflicts` for the preflight assertion.
     pub requires: Vec<Dependency>,
     pub conflicts: Vec<Dependency>,
 }

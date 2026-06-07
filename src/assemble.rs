@@ -1,6 +1,6 @@
 //! Assemble the final `java ...` argv from a resolved instance.
 //!
-//! This is where everything resolved so far becomes the command: build the
+//! This is where everything resolved so far should become the command: build the
 //! classpath (target separator, not the host's), substitute both arg
 //! forms against a dummy-auth + directories map, inject the heap, and append the
 //! tweakers. The result is one `Vec<String>` with the java path at index 0,
@@ -154,7 +154,7 @@ fn build_classpath(records: &[ArtifactRecord], ctx: &Ctx) -> String {
     entries.join(&ctx.path_sep.to_string())
 }
 
-/// Build the substitution map: dummy auth + computed directories + classpath
+/// Build the substitution map: dummy auth + computed directories + classpath.
 /// Substitution is pure.
 fn build_subs(
     profile: &Profile,

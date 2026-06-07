@@ -1,7 +1,8 @@
 //! `mmc-pack.json` - the ordered list of components in an instance.
 //!
 //! We only read `components[].uid` here to know which `patches/<uid>.json`
-//! files to load; the authoritative merge order is each patch's own `order`.
+//! files to load; the merge order is the mmc-pack array order, not the patch
+//! `order` field.
 
 use serde::Deserialize;
 

@@ -1,8 +1,9 @@
-//! Entrypoint: init logging, parse CLI, run the (phase-1) pipeline, and map any
+//! Entrypoint: init logging, parse CLI, run the full pipeline, and map any
 //! top-level error to a distinct exit code.
 //!
-//! Today the pipeline only loads + merges an instance and logs a summary of the
-//! resulting profile; the resolve/download/assemble stages land in later phases.
+//! The pipeline loads, optionally meta-resolves, and merges an instance, then -
+//! given a `--platform` - resolves, downloads, extracts natives, and emits the
+//! launch command. Without `--platform` it stops after the merge summary.
 
 mod assemble;
 mod assets;
@@ -157,8 +158,8 @@ async fn extract_natives(
     Ok(())
 }
 
-/// Report the resolved target and a per-role breakdown of its artifacts. The
-/// downloads themselves land in phase 4.
+/// Report the resolved target and a per-role breakdown of its artifacts, before
+/// the downloads run.
 fn report_resolution(ctx: &Ctx, records: &[ArtifactRecord]) {
     info!("Target platform: {} (os {}, arch {})", ctx.os_token, ctx.os_name, ctx.arch);
     let (mut classpath, mut natives, mut maven) = (0, 0, 0);

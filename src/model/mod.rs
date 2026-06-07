@@ -1,12 +1,11 @@
-//! The component model - pure, serde-derived data shared across phases.
+//! The component model - pure, serde-derived data shared across stages.
 //!
 //! - [`pack`]: `mmc-pack.json` (which patches to load).
 //! - [`patch`]: one `patches/<uid>.json` (the component schema).
-//! - [`profile`]: the merged result every later phase consumes.
+//! - [`profile`]: the merged result the downstream stages consume.
 //!
-//! Many fields are parsed here but only *read* by later phases (rules in
-//! phase 2, urls/sha1 in phases 3-4, ...). We model the full schema up front, so
-//! the not-yet-consumed fields are deliberately allowed rather than removed.
+//! Some fields are parsed for completeness but not yet read anywhere; the
+//! module-level allow below keeps them rather than dropping them from the model.
 #![allow(dead_code)]
 
 pub mod artifact;

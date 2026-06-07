@@ -52,16 +52,13 @@ pub struct Ctx {
     pub features: HashMap<String, bool>,
     /// Classpath separator for the *target*: `;` on windows, else `:`. Used by
     /// the assembler; set here so the decision is made once.
-    #[allow(dead_code)] // forward-looking: consumed by the assemble/emit phase
     pub path_sep: char,
 }
 
 impl Ctx {
     /// The `${arch}` marker substituted into legacy native classifier templates
-    /// (e.g. `natives-windows-${arch}` -> `...-64`); `"32"` or `"64"` by bitness
-    /// Consumed by phases 3/5.
+    /// (e.g. `natives-windows-${arch}` -> `...-64`); `"32"` or `"64"` by bitness.
     #[must_use]
-    #[allow(dead_code)] // forward-looking API: used by the natives/resolve phases
     pub fn arch_number(&self) -> &'static str {
         match self.arch.as_str() {
             "x86" | "arm32" => "32",

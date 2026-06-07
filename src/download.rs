@@ -222,7 +222,7 @@ async fn fetch_retrying(
 }
 
 /// A minimal "fetch some bytes from a URL" capability. Callers that only need
-/// raw bytes (the meta resolver, phase 4.5) depend on this rather than the whole
+/// raw bytes (the meta resolver) depend on this rather than the whole
 /// [`Downloader`], which also lets them be unit-tested with a recorded in-memory
 /// fetcher (keeping `cargo test` offline).
 // Internal trait: the futures are awaited in-task (never spawned), so the Send

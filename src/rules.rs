@@ -1,7 +1,8 @@
 //! Rule evaluation - `allowed(rules, ctx)` with Mojang semantics.
 //!
 //! This is the gate every library, native, and modern-arg entry passes through
-//! in later phases. It accepts both rule dialects against a single [`Ctx`]:
+//! during resolve and assembly. It accepts both rule dialects against a
+//! single [`Ctx`]:
 //! the MMC arch-in-name token (`os.name == "osx-arm64"`) and the classic Mojang
 //! `name`/`arch`/`version`-regex form, plus the `features` gate.
 

@@ -2,10 +2,10 @@
 //!
 //! Two native mechanisms exist and must not be conflated:
 //! - Modern (LWJGL3 / 1.13+): the per-OS classifier jar is its own library,
-//!   classified `Classpath` in phase 3 - it rides the classpath and the loader
+//!   classified `Classpath` by `resolve` - it rides the classpath and the loader
 //!   self-extracts. There is deliberately nothing to do here for those.
 //! - Legacy (LWJGL2 / =<1.12): a `NativeExtract` jar whose contents we unzip
-//!   into `<instance>/natives/`, honoring `extract.exclude`, so phase 6 can point
+//!   into `<instance>/natives/`, honoring `extract.exclude`, so assemble can point
 //!   `-Djava.library.path` at it.
 //!
 //! With `--headless`, input-device natives (the jinput family) are skipped -

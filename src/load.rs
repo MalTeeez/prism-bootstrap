@@ -3,7 +3,7 @@
 //! Pure input-reading: no network, no writes. [`load_components`] returns one
 //! [`Component`] per pack entry, in `mmc-pack.json` array order, marking any
 //! component whose `patches/<uid>.json` is absent as [`Component::Missing`] so a
-//! later step (phase 4.5 `meta`) can resolve it from `meta.prismlauncher.org`.
+//! later step (the `meta` resolver) can resolve it from `meta.prismlauncher.org`.
 //! [`load_instance`] is the all-local convenience wrapper: it errors on the
 //! first missing patch.
 
@@ -26,7 +26,7 @@ pub enum Component {
     /// `patches/<uid>.json` existed and parsed. Boxed: a `Patch` is far larger
     /// than the `Missing` variant, so boxing keeps the enum (and `Vec`) compact.
     Local(Box<Patch>),
-    /// No local patch; defer to the meta resolver (phase 4.5) or fail.
+    /// No local patch; defer to the meta resolver or fail.
     Missing { uid: String, version: Option<String>, patch_path: PathBuf },
 }
 
@@ -53,9 +53,8 @@ pub fn load_components(instance_dir: &Path) -> Result<Vec<Component>> {
             info!(" - reading component {}", component.uid);
             components.push(Component::Local(Box::new(read_patch_file(&patch_path)?)));
         } else {
-            // No local patch: defer to the meta resolver (phase 4.5). We keep
-            // mmc-pack array order - that is what merge folds in, NOT the `order`
-            // field (see the phase-1 decisions log).
+            // No local patch: defer to the meta resolver. We keep mmc-pack array
+            // order - that is what merge folds in, NOT the `order` field.
             info!(" - component {} has no local patch", component.uid);
             components.push(Component::Missing {
                 uid: component.uid.clone(),

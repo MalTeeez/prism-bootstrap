@@ -1,10 +1,8 @@
 //! Distinct process exit codes and the top-level error -> code mapping.
 //!
-//! Each fail-fast preflight failure gets its
-//! own code so a caller (CI) can tell *why* a run failed. Later phases will
-//! introduce typed errors and downcast them here; for now the only errors
-//! reach us are IO/parse failures from `load`, so the mapping is a stub that
-//! returns [`ExitCode::IoError`].
+//! Each fail-fast failure gets its own code so a caller (CI) can tell *why* a run
+//! failed. Typed [`FatalError`]s are downcast to their specific code by
+//! [`exit_code_for`]; anything else maps to [`ExitCode::IoError`].
 
 use std::fmt;
 use std::path::PathBuf;
@@ -13,8 +11,7 @@ use anyhow::Error;
 
 /// A process exit code, one per failure class.
 ///
-/// Most variants are constructed only once their phase's preflight lands; they
-/// are defined up front so the exit-code contract is stable and visible.
+/// They are defined up front so the exit-code contract is stable and visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 #[allow(dead_code)]

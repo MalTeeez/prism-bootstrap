@@ -1,9 +1,9 @@
-//! `ArtifactRecord` - the generic resolved unit the IO phases share.
+//! `ArtifactRecord` - the generic resolved unit the IO stages share.
 //!
-//! `resolve` turns each `Library`/`mavenFile`/`mainJar` (and later each asset)
+//! `resolve` turns each `Library`/`mavenFile`/`mainJar` (and each asset)
 //! into one of these: its on-disk [`Role`], its absolute `local_path`, and its
-//! download `url` (or `None` for assume-local entries). Download (phase 4),
-//! natives (phase 5), and the emitter (phase 6) all operate on this one shape.
+//! download `url` (or `None` for assume-local entries). Download, natives
+//! extraction, and the emitter all operate on this one shape.
 
 use std::path::PathBuf;
 
@@ -20,7 +20,7 @@ pub enum Role {
     MavenFile,
     /// Legacy native jar to extract into `natives/`.
     NativeExtract,
-    /// An asset-store object (produced by the phase-4 asset pipeline).
+    /// An asset-store object (produced by the asset pipeline).
     Asset,
 }
 
@@ -31,7 +31,7 @@ pub struct ArtifactRecord {
     /// diagnostics, dedup tracing, and the optional `resolution.lock`.
     pub coordinate: String,
     /// Download source, verbatim from the patch. `None` means assume-local: the
-    /// file must already exist at `local_path` (never fetched), else phase 4
+    /// file must already exist at `local_path` (never fetched), else download
     /// fails. Orthogonal to [`Role`].
     pub url: Option<String>,
     /// Expected SHA-1, or `None` to skip verification (empty hash).
@@ -44,6 +44,6 @@ pub struct ArtifactRecord {
     pub role: Role,
     /// Path prefixes to skip when unzipping (only meaningful for
     /// `NativeExtract`; empty otherwise). Carries the library's `extract.exclude`
-    /// so phase 5 can honor it without re-consulting the profile.
+    /// so natives extraction can honor it without re-consulting the profile.
     pub extract_exclude: Vec<String>,
 }

@@ -2,7 +2,7 @@
 //!
 //! The full option set: the instance dir + the validated
 //! `--platform` value-enum, plus heap, dummy-auth, directory, and output flags
-//! the assemble/emit phase consumes.
+//! the assembler consumes.
 
 use std::path::PathBuf;
 
@@ -18,7 +18,7 @@ pub struct Args {
     pub instance_dir: PathBuf,
 
     /// Target platform token, validated against the fixed list. Optional: when
-    /// Required once the resolve/emit phases land; optional for now.
+    /// omitted, the tool stops after printing the merged-profile summary.
     #[arg(long, value_enum)]
     pub platform: Option<Platform>,
 

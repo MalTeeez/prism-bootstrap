@@ -52,6 +52,10 @@ pub enum FatalError {
     MissingLocalLib { coordinate: String, path: PathBuf },
     /// A download failed or a SHA-1/size mismatch survived all retries.
     DownloadFailed { coordinate: String, reason: String },
+    /// No component set a `mainClass`, so there is nothing to launch.
+    NoMainClass,
+    /// A `requires`/`conflicts` dependency constraint is not satisfied.
+    UnsatisfiedDeps { reason: String },
 }
 
 impl fmt::Display for FatalError {
@@ -66,6 +70,14 @@ impl fmt::Display for FatalError {
             ),
             FatalError::DownloadFailed { coordinate, reason } => {
                 write!(f, "failed to download {coordinate}: {reason}")
+            }
+            FatalError::NoMainClass => write!(
+                f,
+                "no component sets a mainClass - nothing to launch \
+                 (the instance's patches are incomplete)"
+            ),
+            FatalError::UnsatisfiedDeps { reason } => {
+                write!(f, "unsatisfied component dependency: {reason}")
             }
         }
     }
@@ -82,6 +94,8 @@ pub fn exit_code_for(error: &Error) -> ExitCode {
     match error.downcast_ref::<FatalError>() {
         Some(FatalError::MissingLocalLib { .. }) => ExitCode::MissingLocalLib,
         Some(FatalError::DownloadFailed { .. }) => ExitCode::DownloadFailed,
+        Some(FatalError::NoMainClass) => ExitCode::BadMainClass,
+        Some(FatalError::UnsatisfiedDeps { .. }) => ExitCode::UnsatisfiedDeps,
         None => ExitCode::IoError,
     }
 }

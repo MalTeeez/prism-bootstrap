@@ -4,10 +4,13 @@
 //! Today the pipeline only loads + merges an instance and logs a summary of the
 //! resulting profile; the resolve/download/assemble stages land in later phases.
 
+mod assemble;
 mod assets;
 mod cli;
 mod download;
+mod emit;
 mod exit;
+mod java;
 mod load;
 mod merge;
 mod model;
@@ -52,8 +55,9 @@ fn init_logging() -> Result<()> {
         .context("initialising the logger")
 }
 
-/// The pipeline so far: load -> merge -> resolve -> download (libraries + assets).
-/// Without a `--platform` we stop after the merge summary (resolution needs a
+/// The full pipeline: load, merge, preflight, resolve, download (libraries and
+/// assets), extract natives, select java, assemble, and emit. Without a
+/// `--platform` we stop after the merge summary (everything downstream needs a
 /// target).
 async fn run(args: &cli::Args) -> Result<()> {
     let patches = load::load_instance(args.instance_dir.as_path())?;
@@ -65,6 +69,11 @@ async fn run(args: &cli::Args) -> Result<()> {
     };
     let ctx = platform::expand_platform(platform);
     let instance = resolve::absolute_instance_dir(args.instance_dir.as_path())?;
+
+    // Fail-fast before any downloads: a missing main class or unsatisfied
+    // dependency is cheaper to report now than after fetching everything.
+    assemble::preflight(&profile, &patches).context("preflight checks")?;
+
     let records = resolve::resolve(&profile, &ctx, &instance)
         .context("resolving artifacts for the target platform")?;
     report_resolution(&ctx, &records);
@@ -86,9 +95,35 @@ async fn run(args: &cli::Args) -> Result<()> {
     if !args.dry_run {
         extract_natives(args, &records, &instance).await?;
     }
-
     info!("All artifacts present for {}.", ctx.os_token);
+
+    // Assemble and emit the launch command.
+    info!("Selecting a JDK:");
+    let java = java::select_java(args.java.as_deref(), &profile.compatible_java_majors)
+        .context("selecting a JDK")?;
+    let config = assemble_config(args, &instance, java);
+    let command = assemble::assemble(&profile, &ctx, &records, &instance, &config)
+        .context("assembling the launch command")?;
+    let argv_path = args.emit.clone().unwrap_or_else(|| instance.join("launch.argv"));
+    emit::emit(&command, &argv_path, &records, args.headless)
+        .context("emitting the launch command")?;
     Ok(())
+}
+
+/// Build the assembly [`Config`](assemble::Config) from the CLI args, applying
+/// the `--game-dir` default of `<instance>/.minecraft`.
+fn assemble_config(args: &cli::Args, instance: &std::path::Path, java: std::path::PathBuf) -> assemble::Config {
+    assemble::Config {
+        java,
+        xms: args.xms.clone(),
+        xmx: args.xmx.clone(),
+        username: args.username.clone(),
+        uuid: args.uuid.clone(),
+        access_token: args.access_token.clone(),
+        user_type: args.user_type.clone(),
+        game_dir: args.game_dir.clone().unwrap_or_else(|| instance.join(".minecraft")),
+        headless: args.headless,
+    }
 }
 
 /// Extract legacy natives off the async runtime (the `zip` crate is blocking).
@@ -117,19 +152,20 @@ async fn extract_natives(
 /// downloads themselves land in phase 4.
 fn report_resolution(ctx: &Ctx, records: &[ArtifactRecord]) {
     info!("Target platform: {} (os {}, arch {})", ctx.os_token, ctx.os_name, ctx.arch);
-    let (mut classpath, mut natives, mut maven, mut no_url) = (0, 0, 0, 0);
+    let (mut classpath, mut natives, mut maven) = (0, 0, 0);
     for record in records {
         match record.role {
             Role::Classpath => classpath += 1,
             Role::NativeExtract => natives += 1,
             Role::MavenFile => maven += 1,
-            Role::NoUrl => no_url += 1,
             Role::Asset => {}
         }
     }
+    // Assume-local count is orthogonal to role: any record without a url.
+    let assume_local = records.iter().filter(|record| record.url.is_none()).count();
     info!(
         " - {} artifacts: {classpath} classpath, {natives} native-extract, \
-         {maven} maven-file, {no_url} no-url (assume-local)",
+         {maven} maven-file ({assume_local} assume-local, no url)",
         records.len()
     );
 }

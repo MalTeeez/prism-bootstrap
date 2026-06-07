@@ -7,11 +7,14 @@
 
 use std::path::PathBuf;
 
-/// What an artifact is *for* - decides whether it lands on the classpath, gets
-/// extracted, is fetched-but-excluded, or must already be present.
+/// What an artifact is *for* - its on-disk destination. This is orthogonal
+/// to whether it is fetched: a record with no `url` is assumed-local regardless
+/// of role, so e.g. an `MMC-hint: local` classpath jar is
+/// `Classpath` with `url: None` - on the classpath *and* never fetched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
-    /// On the classpath: plain libs, modern self-extracting natives, main jar.
+    /// On the classpath: plain libs, modern self-extracting natives, main jar,
+    /// and no-url local libs (which are used on the classpath but not fetched).
     Classpath,
     /// Downloaded into `libraries/` but off the classpath.
     MavenFile,
@@ -19,9 +22,6 @@ pub enum Role {
     NativeExtract,
     /// An asset-store object (produced by the phase-4 asset pipeline).
     Asset,
-    /// No resolvable url: must already exist locally, else phase 4 fails
-    /// Never fetched.
-    NoUrl,
 }
 
 /// One resolved artifact: where it comes from, where it goes, and its role.
@@ -30,7 +30,9 @@ pub struct ArtifactRecord {
     /// The maven coordinate (or asset name) this record resolves - for
     /// diagnostics, dedup tracing, and the optional `resolution.lock`.
     pub coordinate: String,
-    /// Download source, verbatim from the patch; `None` for assume-local.
+    /// Download source, verbatim from the patch. `None` means assume-local: the
+    /// file must already exist at `local_path` (never fetched), else phase 4
+    /// fails. Orthogonal to [`Role`].
     pub url: Option<String>,
     /// Expected SHA-1, or `None` to skip verification (empty hash).
     pub sha1: Option<String>,

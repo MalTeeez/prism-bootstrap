@@ -50,6 +50,10 @@ pub struct Patch {
     /// Hint(s) for which JDK majors this component runs on.
     #[serde(default)]
     pub compatible_java_majors: Vec<u32>,
+    /// Mojang's structured Java requirement (`{ majorVersion }`); the modern
+    /// equivalent of `compatibleJavaMajors`. Folded into the same hint list.
+    #[serde(default)]
+    pub java_version: Option<JavaVersion>,
 
     /// Libraries declared by this component -> classpath (accumulate).
     #[serde(default)]
@@ -242,6 +246,17 @@ pub struct MainJar {
     pub name: String,
     #[serde(default)]
     pub downloads: Option<Downloads>,
+}
+
+/// Mojang's structured Java requirement (1.17+ patches). Only `majorVersion`
+/// matters for JDK selection; `component` (the Mojang JRE name) is advisory.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaVersion {
+    #[serde(default)]
+    pub major_version: Option<u32>,
+    #[serde(default)]
+    pub component: Option<String>,
 }
 
 /// The asset index reference declared by the Minecraft component.

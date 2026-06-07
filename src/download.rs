@@ -20,7 +20,7 @@ use tokio::sync::Semaphore;
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::exit::FatalError;
-use crate::model::artifact::{ArtifactRecord, Role};
+use crate::model::artifact::ArtifactRecord;
 
 /// Total attempts per artifact before a download is declared fatal.
 const MAX_ATTEMPTS: u32 = 4;
@@ -139,18 +139,16 @@ async fn download_one(
     record: &ArtifactRecord,
     options: &DownloadOptions,
 ) -> Result<()> {
-    // No-url: must already be on disk; never fetched. Asserted even in dry-run
-    // (it's a preflight check that needs no bytes).
-    if record.role == Role::NoUrl {
-        return assert_local(record);
-    }
+    // No url -> assume-local: must already be on disk; never fetched. This is
+    // orthogonal to the role (a Classpath lib can be assume-local). A
+    // real run fails fast if it's missing; a dry run only warns, so
+    // `--dry-run` still emits a command preview without the bytes on disk.
+    let Some(url) = record.url.as_deref() else {
+        return assert_local(record, options.dry_run);
+    };
     if options.dry_run {
         return Ok(());
     }
-
-    let Some(url) = record.url.as_deref() else {
-        bail!("{} has no download url but is not marked no-url", record.coordinate);
-    };
 
     // Within-run idempotency: a present+valid file (or any present file under
     // --no-verify) is trustworthy thanks to the atomic write.
@@ -164,17 +162,26 @@ async fn download_one(
         .with_context(|| format!("writing {}", record.local_path.display()))
 }
 
-/// Assert a no-url artifact is present, else fail with a path-naming error.
-fn assert_local(record: &ArtifactRecord) -> Result<()> {
+/// Assert an assume-local (url-less) artifact is present. On a real run a
+/// missing file is fatal; on a dry run it only warns, so a command
+/// preview can still be emitted before the caller stages the file.
+fn assert_local(record: &ArtifactRecord, dry_run: bool) -> Result<()> {
     if record.local_path.is_file() {
-        Ok(())
-    } else {
-        Err(FatalError::MissingLocalLib {
-            coordinate: record.coordinate.clone(),
-            path: record.local_path.clone(),
-        }
-        .into())
+        return Ok(());
     }
+    if dry_run {
+        warn!(
+            " - no-url library {} not present at {} - place it there before launching",
+            record.coordinate,
+            record.local_path.display()
+        );
+        return Ok(());
+    }
+    Err(FatalError::MissingLocalLib {
+        coordinate: record.coordinate.clone(),
+        path: record.local_path.clone(),
+    }
+    .into())
 }
 
 /// Fetch with bounded retries + backoff; a surviving failure is fatal.
@@ -347,6 +354,7 @@ mod tests {
 
     use super::*;
     use crate::exit::{ExitCode, exit_code_for};
+    use crate::model::artifact::Role;
 
     fn record(role: Role, path: PathBuf, sha1: Option<&str>, size: Option<u64>) -> ArtifactRecord {
         ArtifactRecord {
@@ -402,10 +410,21 @@ mod tests {
     }
 
     #[test]
-    fn missing_no_url_is_fatal_missing_local_lib() {
-        let rec = record(Role::NoUrl, PathBuf::from("/no/such/lib.jar"), None, None);
-        let error = assert_local(&rec).unwrap_err();
+    fn missing_assume_local_is_fatal_on_a_real_run() {
+        // A url-less (assume-local) classpath lib that isn't on disk is fatal on
+        // a real run - keyed on the absent url, not a special role.
+        let mut rec = record(Role::Classpath, PathBuf::from("/no/such/lib.jar"), None, None);
+        rec.url = None;
+        let error = assert_local(&rec, false).unwrap_err();
         assert_eq!(exit_code_for(&error), ExitCode::MissingLocalLib);
+    }
+
+    #[test]
+    fn missing_assume_local_only_warns_on_dry_run() {
+        // A dry run must still succeed (preview), only warning about the gap.
+        let mut rec = record(Role::Classpath, PathBuf::from("/no/such/lib.jar"), None, None);
+        rec.url = None;
+        assert!(assert_local(&rec, true).is_ok());
     }
 
     #[tokio::test]

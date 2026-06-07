@@ -1,8 +1,8 @@
 //! Command-line arguments.
 //!
-//! A minimal stub for phase 1: enough to point the loader at an instance. The
-//! full option set and the validated `--platform` value-enum are
-//! wired in phase 6; this struct grows there.
+//! The full option set: the instance dir + the validated
+//! `--platform` value-enum, plus heap, dummy-auth, directory, and output flags
+//! the assemble/emit phase consumes.
 
 use std::path::PathBuf;
 
@@ -48,4 +48,42 @@ pub struct Args {
     /// Repeatable.
     #[arg(long, value_name = "PATTERN")]
     pub skip_natives: Vec<String>,
+
+    /// Initial heap size (`-Xms`); the tool injects it, patches never do.
+    #[arg(long, default_value = "512m")]
+    pub xms: String,
+
+    /// Max heap size (`-Xmx`); mirrors the original instance dump, override
+    /// freely.
+    #[arg(long, default_value = "16384m")]
+    pub xmx: String,
+
+    /// JDK to put in the command. Default: auto-select by `compatibleJavaMajors`
+    /// from `PATH`.
+    #[arg(long, value_name = "PATH")]
+    pub java: Option<PathBuf>,
+
+    /// Dummy account name -> `${auth_player_name}`.
+    #[arg(long, default_value = "CI")]
+    pub username: String,
+
+    /// Dummy account uuid -> `${auth_uuid}`.
+    #[arg(long, default_value = "00000000-0000-0000-0000-000000000000")]
+    pub uuid: String,
+
+    /// Dummy access token -> `${auth_access_token}`.
+    #[arg(long, default_value = "0")]
+    pub access_token: String,
+
+    /// Account type -> `${user_type}`; `legacy` or `msa`.
+    #[arg(long, default_value = "legacy")]
+    pub user_type: String,
+
+    /// Game working directory -> `${game_directory}`. Default `<instance>/.minecraft`.
+    #[arg(long, value_name = "PATH")]
+    pub game_dir: Option<PathBuf>,
+
+    /// Where to write `launch.argv`. Default `<instance>/launch.argv`.
+    #[arg(long, value_name = "PATH")]
+    pub emit: Option<PathBuf>,
 }

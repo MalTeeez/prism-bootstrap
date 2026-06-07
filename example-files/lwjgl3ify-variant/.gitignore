@@ -1,0 +1,7 @@
+assets/
+libraries/
+!libraries/lwjgl3ify-3.0.23-forgePatches.jar
+natives/
+versions/
+launch.argv
+resolution.lock

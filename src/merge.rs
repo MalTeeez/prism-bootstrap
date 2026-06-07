@@ -62,10 +62,13 @@ fn merge_patch(profile: &mut Profile, patch: &Patch) {
     profile.traits.extend(patch.plus_traits.iter().cloned());
     profile.agents.extend(patch.plus_agents.iter().cloned());
 
-    // Collect Java-major hints, order-preserving and deduped.
-    for major in &patch.compatible_java_majors {
-        if !profile.compatible_java_majors.contains(major) {
-            profile.compatible_java_majors.push(*major);
+    // Collect Java-major hints, order-preserving and deduped. Both the
+    // MMC `compatibleJavaMajors` list and Mojang's `javaVersion.majorVersion`
+    // feed the same set, so vanilla 1.17+ and Prism patches both select a JDK.
+    let mojang_major = patch.java_version.as_ref().and_then(|version| version.major_version);
+    for major in patch.compatible_java_majors.iter().copied().chain(mojang_major) {
+        if !profile.compatible_java_majors.contains(&major) {
+            profile.compatible_java_majors.push(major);
         }
     }
 
@@ -239,6 +242,21 @@ mod tests {
             profile.jvm_args,
             ["--add-opens", "java.base/java.io=ALL-UNNAMED"]
         );
+    }
+
+    #[test]
+    fn mojang_java_version_folds_into_compatible_majors() {
+        // A vanilla 1.17+ patch states its JDK via `javaVersion.majorVersion`,
+        // not `compatibleJavaMajors`; both must reach the selection hint list.
+        let patches = vec![
+            patch(r#"{ "uid": "net.minecraft", "order": 1,
+                       "javaVersion": { "component": "java-runtime-gamma", "majorVersion": 21 } }"#),
+            patch(r#"{ "uid": "extra", "order": 2, "compatibleJavaMajors": [21, 25] }"#),
+        ];
+
+        let profile = merge(&patches);
+        // 21 from javaVersion (deduped against the list), 25 from the list.
+        assert_eq!(profile.compatible_java_majors, [21, 25]);
     }
 
     /// End-to-end fold of the bundled lwjgl3ify 1.7.10 instance variant

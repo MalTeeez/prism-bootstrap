@@ -64,8 +64,9 @@ pub fn resolve(profile: &Profile, ctx: &Ctx, instance_dir: &Path) -> Result<Vec<
         if let Some(mut record) = classify_library(maven_file, ctx, &libraries_dir)
             .with_context(|| format!("resolving maven file {}", maven_file.name))?
         {
-            // A downloadable maven file is off-classpath; keep NoUrl as-is so
-            // its assume-local semantics survive.
+            // A mavenFile is downloaded (or assumed-local) but never on the
+            // classpath. Its assume-local-ness rides on `url`, not role, so
+            // flipping the role here preserves it.
             if record.role == Role::Classpath {
                 record.role = Role::MavenFile;
             }
@@ -123,7 +124,9 @@ fn classify_library(
         }));
     }
 
-    // (d) no resolvable url -> assume-local; phase 4 asserts it (never fetch).
+    // (d) no resolvable url -> assume-local (url: None); phase 4 asserts it on
+    // disk and never fetches it. It is still used on the classpath - the
+    // "use it") - the absent url, not the role, marks it assume-local.
     // `MMC-hint: "local"` jars live flat in the instance's libraries dir
     // (matching MultiMC/Prism - confirmed against a real launch log), not under
     // the maven layout the downloaded libs use.
@@ -138,7 +141,7 @@ fn classify_library(
         sha1: None,
         size: None,
         local_path,
-        role: Role::NoUrl,
+        role: Role::Classpath,
         extract_exclude: Vec::new(),
     }))
 }
@@ -407,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn no_url_local_hint_is_nourl_with_no_url() {
+    fn no_url_local_hint_is_classpath_assume_local() {
         let local = library(
             r#"{ "name": "com.github.GTNewHorizons:lwjgl3ify:3.0.23:forgePatches",
                  "MMC-hint": "local" }"#,
@@ -417,7 +420,8 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(record.role, Role::NoUrl);
+        // On the classpath, but assume-local (no url to fetch).
+        assert_eq!(record.role, Role::Classpath);
         assert_eq!(record.url, None);
         // `MMC-hint: local` jars live flat in <instance>/libraries/, matching
         // MultiMC/Prism - not under the maven layout.
@@ -427,13 +431,15 @@ mod tests {
     #[test]
     fn no_url_without_local_hint_keeps_maven_path() {
         // A url-less entry that is *not* MMC-hint:local stays on the maven layout
-        // (the flat placement is specific to the local hint).
+        // (the flat placement is specific to the local hint), still classpath +
+        // assume-local.
         let bare = library(r#"{ "name": "org.example:thing:1.0" }"#);
         let ctx = expand_platform(Platform::Linux);
         let record = classify_library(&bare, &ctx, Path::new("/inst/libraries"))
             .unwrap()
             .unwrap();
-        assert_eq!(record.role, Role::NoUrl);
+        assert_eq!(record.role, Role::Classpath);
+        assert_eq!(record.url, None);
         assert!(record.local_path.ends_with("org/example/thing/1.0/thing-1.0.jar"));
     }
 
@@ -515,13 +521,19 @@ mod tests {
         assert_eq!(natives.len(), 1);
         assert!(natives[0].starts_with("net.java.jinput:jinput-platform:2.0.5:natives-linux"));
 
-        // The MMC-hint local forgePatches jar is the lone no-url entry.
-        let no_url: Vec<&str> = records
+        // The MMC-hint local forgePatches jar is the lone assume-local (url-less)
+        // entry - and it is a Classpath record, so it lands on the emitted -cp.
+        let assume_local: Vec<&str> = records
             .iter()
-            .filter(|r| r.role == Role::NoUrl)
+            .filter(|r| r.url.is_none())
             .map(|r| r.coordinate.as_str())
             .collect();
-        assert_eq!(no_url, ["com.github.GTNewHorizons:lwjgl3ify:3.0.23:forgePatches"]);
+        assert_eq!(assume_local, ["com.github.GTNewHorizons:lwjgl3ify:3.0.23:forgePatches"]);
+        let forge_patches = records
+            .iter()
+            .find(|r| r.coordinate == "com.github.GTNewHorizons:lwjgl3ify:3.0.23:forgePatches")
+            .expect("forgePatches record present");
+        assert_eq!(forge_patches.role, Role::Classpath);
 
         // The main jar resolves to the conventional versions/ layout.
         let main_jar = records

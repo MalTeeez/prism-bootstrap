@@ -55,7 +55,7 @@ pub struct Args {
 
     /// Max heap size (`-Xmx`); mirrors the original instance dump, override
     /// freely.
-    #[arg(long, default_value = "16384m")]
+    #[arg(long, default_value = "6144m")]
     pub xmx: String,
 
     /// JDK to put in the command. Default: auto-select by `compatibleJavaMajors`

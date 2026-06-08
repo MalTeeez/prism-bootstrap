@@ -43,11 +43,18 @@ Other system packages that are required for running with `xvfb-run` (on debian a
 Then, after bootstrapping your instance, go into .minecraft and run:
 
 `bash -c 'env $(grep -v "^\\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "$(head -1 ../launch.argv)" @<(tail -n +2 ../launch.argv)' > logs/log.txt 2>&1 &`
-(bash -c in case of other shells)
-(grep before env to allow comments)
+> (bash -c in case of other shells)
+
+> (grep before env to allow comments)
 
 And then to check if it worked (after a short while):
+
 `DISPLAY=:99 XAUTHORITY=./xvfb.auth scrot -o test.png`
+
+
+If you want to get a recording of the startup, you can use the script at `record_start.sh` - it needs these packages (debian):
+- ffmpeg
+- fonts-dejavu-core
 
 ## How it works
 

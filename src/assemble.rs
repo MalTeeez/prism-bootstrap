@@ -30,7 +30,7 @@ pub struct Config {
     pub java: PathBuf,
     /// `-Xms` value (e.g. `512m`).
     pub xms: String,
-    /// `-Xmx` value (e.g. `16384m`).
+    /// `-Xmx` value (e.g. `6144m`).
     pub xmx: String,
     /// `${auth_player_name}`.
     pub username: String,
@@ -409,7 +409,7 @@ mod tests {
         Config {
             java: PathBuf::from("/jdk/bin/java"),
             xms: "512m".to_owned(),
-            xmx: "16384m".to_owned(),
+            xmx: "6144m".to_owned(),
             username: "CI".to_owned(),
             uuid: "00000000-0000-0000-0000-000000000000".to_owned(),
             access_token: "0".to_owned(),
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(argv[0], "/jdk/bin/java");
         // Heap injected by the tool.
         assert!(argv.iter().any(|arg| arg == "-Xms512m"));
-        assert!(argv.iter().any(|arg| arg == "-Xmx16384m"));
+        assert!(argv.iter().any(|arg| arg == "-Xmx6144m"));
         // Legacy path: we supplied `-cp` (it was not templated by jvm args).
         let cp_index = argv.iter().position(|arg| arg == "-cp").expect("-cp present");
         let classpath = &argv[cp_index + 1];

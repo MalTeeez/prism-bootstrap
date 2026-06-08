@@ -148,7 +148,7 @@ resolver <instance-dir> --platform <token> [options]
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `--xms <size>` | `512m` | initial heap (the prior default) |
-| `--xmx <size>` | `16384m` | max heap (mirrors the original instance dump; override freely) |
+| `--xmx <size>` | `6144m` | max heap (mirrors the original instance dump; override freely) |
 | `--headless` | off | adjust *internals* for headless (see 4.2); does **not** wrap in xvfb |
 | `--jobs <n>` | `16` | parallel downloads |
 | `--java <path>` | auto | JDK to put in the command; auto = resolve by `compatibleJavaMajors` from `PATH` |
@@ -517,7 +517,7 @@ subs = dummy_auth | dirs | {
     "version_name": ver, "assets_root": f"{inst}/assets", "assets_index_name": idx_id, ... }
 
 jvm  = (profile.jvmArgs or []) + resolve_args(profile.arguments.jvm, ctx, subs)
-jvm += [f"-Xms{args.xms}", f"-Xmx{args.xmx}"]            # defaults 512m / 16384m
+jvm += [f"-Xms{args.xms}", f"-Xmx{args.xmx}"]            # defaults 512m / 6144m
 if "${classpath}" not used in jvm: jvm += ["-cp", subs["classpath"]]   # legacy path
 if "java.library.path" not set:    jvm += [f"-Djava.library.path={inst}/natives"]
 if args.headless:                  jvm += headless_internals(inst)     # NOT xvfb
@@ -544,7 +544,7 @@ cmd  = [args.java or select_java(profile)] \
   -Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader \
   --enable-native-access ALL-UNNAMED \
   --add-opens java.base/java.io=ALL-UNNAMED  ... (full +jvmArgs block) \
-  -Xms512m -Xmx16384m \
+  -Xms512m -Xmx6144m \
   -Djava.library.path=<instance>/natives \
   -cp <lib1>:<lib2>:...:<instance>/versions/1.7.10/1.7.10.jar \
   com.gtnewhorizons.retrofuturabootstrap.MainStartOnFirstThread \
@@ -554,7 +554,7 @@ cmd  = [args.java or select_java(profile)] \
   --tweakClass cpw.mods.fml.common.launcher.FMLTweaker
 ```
 
-The tool emits exactly this `java` command (here `--xmx` left at its `16384m`
+The tool emits exactly this `java` command (here `--xmx` left at its `6144m`
 default). It does **not** wrap it: running it with working directory
 `<instance>/.minecraft` is the caller's job, as is the virtual display. With
 `--headless` the tool also writes `launch.env` with `LIBGL_ALWAYS_SOFTWARE=1`
@@ -601,7 +601,7 @@ Later, swap the heuristic for a coremod that auto-joins a world and calls
 
 ## 14. Config knobs / open questions
 
-- **Heap** - `--xms` (default `512m`), `--xmx` (default `16384m`); overridable.
+- **Heap** - `--xms` (default `512m`), `--xmx` (default `6144m`); overridable.
 - **Platform** - required `--platform`, validated against the fixed token list.
 - **Feature flags**, **parallelism** (`--jobs`), **dummy account**, **JDK
   selection** (`--java` or auto from `compatibleJavaMajors`).

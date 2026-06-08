@@ -783,24 +783,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mc-headless-launcher"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "hex",
- "log",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "sha1",
- "simple_logger",
- "tokio",
- "zip",
-]
-
-[[package]]
 name = "memchr"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -904,6 +886,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "prism-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hex",
+ "log",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha1",
+ "simple_logger",
+ "tokio",
+ "zip",
 ]
 
 [[package]]

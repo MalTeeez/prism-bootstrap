@@ -112,10 +112,13 @@ async fn run(args: &cli::Args) -> Result<()> {
     let java = java::select_java(args.java.as_deref(), &profile.compatible_java_majors)
         .context("selecting a JDK")?;
     let config = assemble_config(args, &instance, java);
+    // The launch command (and the game) cd into the game dir, so make sure it
+    // exists - Prism would normally have created it.
+    ensure_game_dir(&config.game_dir)?;
     let command = assemble::assemble(&profile, &ctx, &records, &instance, &config)
         .context("assembling the launch command")?;
     let argv_path = args.emit.clone().unwrap_or_else(|| instance.join("launch.argv"));
-    emit::emit(&command, &argv_path, &records, args.headless)
+    emit::emit(&command, &argv_path, &records, args.headless, &config.game_dir)
         .context("emitting the launch command")?;
     Ok(())
 }
@@ -134,6 +137,18 @@ fn assemble_config(args: &cli::Args, instance: &std::path::Path, java: std::path
         game_dir: args.game_dir.clone().unwrap_or_else(|| instance.join(".minecraft")),
         headless: args.headless,
     }
+}
+
+/// Create the game working directory (default `<instance>/.minecraft`) if it
+/// isn't there yet, including any missing parents.
+fn ensure_game_dir(game_dir: &std::path::Path) -> Result<()> {
+    if game_dir.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(game_dir)
+        .with_context(|| format!("creating game directory {}", game_dir.display()))?;
+    info!("Created game directory {}", game_dir.display());
+    Ok(())
 }
 
 /// Extract legacy natives off the async runtime (the `zip` crate is blocking).

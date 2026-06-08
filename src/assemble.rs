@@ -189,7 +189,7 @@ fn build_subs(
     subs.insert("classpath_separator", ctx.path_sep.to_string());
     subs.insert("natives_directory", instance.join("natives").to_string_lossy().into_owned());
     subs.insert("library_directory", instance.join("libraries").to_string_lossy().into_owned());
-    subs.insert("launcher_name", "mc-headless-launcher".to_owned());
+    subs.insert("launcher_name", "prism-bootstrap".to_owned());
     subs.insert("launcher_version", env!("CARGO_PKG_VERSION").to_owned());
     subs
 }

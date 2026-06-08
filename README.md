@@ -1,4 +1,4 @@
-# mc-headless-launcher
+# prism-bootstrap
 
 A small CLI that turns a MultiMC/Prism instance into a runnable `java ...` command -
 with no launcher installed. It reads an instance (`mmc-pack.json` +
@@ -12,7 +12,7 @@ Therefore, in basically all cases, an internet connection is required.
 ## Usage
 
 ```
-mc-headless-launcher <instance-dir> --platform <token> [options]
+prism-bootstrap <instance-dir> --platform <token> [options]
 ```
 
 - `<instance-dir>` - directory holding `mmc-pack.json` and `patches/`; also where
@@ -26,6 +26,28 @@ Common options: `--meta-url <url>` (resolve pack-only instances, see below),
 `--xms`/`--xmx` (heap), `--headless`, `--jobs <n>`, `--java <path>`,
 `--game-dir <path>`, `--emit <path>`, `--no-verify`, `--dry-run`, and the
 dummy-auth flags (`--username`/`--uuid`/`--access-token`/`--user-type`).
+
+## Headless
+
+The initial idea for the usage of this tool was setting up mc for headless ci instances.
+Therefore the `--headless` option (when provided) generates a simple launch.env with
+the environment variables required when running with `xvfb-run` (and some other niceties).
+
+Other system packages that are required for running with `xvfb-run` (on debian at least):
+- `xvfb`
+- `libgl1-mesa-dri`
+- `xauth`
+- `libegl1` 
+- `libegl-mesa0`
+
+Then, after bootstrapping your instance, go into .minecraft and run:
+
+`bash -c 'env $(grep -v "^\\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "$(head -1 ../launch.argv)" @<(tail -n +2 ../launch.argv)' > logs/log.txt 2>&1 &`
+(bash -c in case of other shells)
+(grep before env to allow comments)
+
+And then to check if it worked (after a short while):
+`DISPLAY=:99 XAUTHORITY=./xvfb.auth scrot -o test.png`
 
 ## How it works
 
@@ -85,14 +107,14 @@ missing patch is a hard error naming the file to provide.
   assets/indexes/<id>.json
   assets/objects/<ab>/<hash>       [+ assets/virtual/<id>/... for legacy indexes]
   versions/<ver>/<ver>.jar         client jar
+  minecraft/                      game working dir (created if absent)
   launch.argv                      emitted command, one token per line
-  launch.env                       software-GL hints (only with --headless)
+  launch.env                       software-GL + silent-audio hints (only with --headless)
+  alsoft.conf                      OpenAL Soft config (only with --headless)
   resolution.lock                  audit manifest of every resolved artifact
 ```
 
-After assembling, we emit a `java ...` command for quick starts. With
-`--headless` we also write a `launch.env` (software-GL hints) and pin LWJGL's
-native-extract dir, so a caller can do `env $(xargs <launch.env) xvfb-run -a ...`.
+After assembling, we emit a `java ...` command for quick starts.
 
 ## Exit codes (yay, stuff broke...)
 

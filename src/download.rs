@@ -52,7 +52,7 @@ impl Downloader {
     /// Returns an error if the HTTP client cannot be constructed.
     pub fn new(options: DownloadOptions) -> Result<Self> {
         let client = reqwest::Client::builder()
-            .user_agent(concat!("mc-headless-launcher/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("prism-bootstrap/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
             .timeout(Duration::from_mins(5))
             .build()

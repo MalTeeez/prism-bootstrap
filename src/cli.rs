@@ -12,7 +12,7 @@ use crate::platform::Platform;
 
 /// Resolve a MultiMC/Prism instance into a runnable `java` command.
 #[derive(Debug, Parser)]
-#[command(name = "mc-headless-launcher")]
+#[command(name = "prism-bootstrap")]
 pub struct Args {
     /// Instance directory containing `mmc-pack.json` and `patches/`.
     pub instance_dir: PathBuf,

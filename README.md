@@ -43,10 +43,6 @@ Other system packages that are required for running with `xvfb-run` (on debian a
 
 Then, after bootstrapping your instance, go into .minecraft and run:
 
-#### For java 9+
-`bash -c 'env $(grep -v "^\\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "$(head -1 ../launch.argv)" @<(tail -n +2 ../launch.argv)' > headless.log.txt 2>&1 &`
-
-#### For java -8
 `bash -c 'mapfile -t argv < ../launch.argv; env $(grep -v "^\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "${argv[0]}" "${argv[@]:1}"' > headless.log 2>&1 &`
 
 > bash -c in case of other shells
@@ -63,6 +59,7 @@ If you want to get a recording of the startup, you can use the script at `record
 - fonts-dejavu-core
 - python3-xlib
 - xdotool
+- x11-xserver-utils (for lwjgl2)
 
 ## How it works
 

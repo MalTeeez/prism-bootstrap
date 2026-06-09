@@ -99,6 +99,11 @@ async fn run(args: &cli::Args) -> Result<()> {
     if let Some(asset_index) = &profile.asset_index {
         assets::download_assets(&downloader, asset_index, &instance).await?;
     }
+    // Download and patch the log4j config (Log4Shell mitigation) before assembly
+    // points the JVM arg at it.
+    if let Some(logging) = &profile.logging {
+        assets::ensure_log_config(&downloader, logging, &instance).await?;
+    }
 
     // Extract legacy natives now that their jars are on disk (skipped on a
     // dry run, where nothing was downloaded).
@@ -214,5 +219,9 @@ fn log_summary(profile: &Profile) {
     );
     if !profile.compatible_java_majors.is_empty() {
         info!(" - compatible java majors: {:?}", profile.compatible_java_majors);
+    }
+    // Surface the Log4Shell mitigation so the user knows it's being applied.
+    if let Some(file) = profile.logging.as_ref().and_then(|logging| logging.file.as_ref()) {
+        info!(" - log4j config: {} (Log4Shell mitigation)", file.id);
     }
 }

@@ -53,6 +53,9 @@ fn merge_patch(profile: &mut Profile, patch: &Patch) {
     if let Some(asset_index) = &patch.asset_index {
         profile.asset_index = Some(asset_index.clone());
     }
+    if let Some(logging) = &patch.logging {
+        profile.logging = Some(logging.clone());
+    }
 
     apply_game_args(profile, patch);
 
@@ -242,6 +245,26 @@ mod tests {
             profile.jvm_args,
             ["--add-opens", "java.base/java.io=ALL-UNNAMED"]
         );
+    }
+
+    #[test]
+    fn logging_config_is_last_wins_from_the_setting_component() {
+        // The Minecraft component sets `logging`; a later component without one
+        // must not clear it, and a later one with its own must override.
+        let patches = vec![
+            patch(
+                r#"{ "uid": "net.minecraft", "order": 1, "logging": {
+                       "argument": "-Dlog4j.configurationFile=${path}",
+                       "file": { "id": "client-1.7.xml", "url": "https://x/client-1.7.xml" },
+                       "type": "log4j2-xml" } }"#,
+            ),
+            patch(r#"{ "uid": "net.minecraftforge", "order": 2 }"#),
+        ];
+
+        let profile = merge(&patches);
+        let logging = profile.logging.expect("logging carried through from net.minecraft");
+        assert_eq!(logging.argument.as_deref(), Some("-Dlog4j.configurationFile=${path}"));
+        assert_eq!(logging.file.expect("file present").id, "client-1.7.xml");
     }
 
     #[test]

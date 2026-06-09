@@ -34,6 +34,10 @@ pub struct ArtifactRecord {
     /// file must already exist at `local_path` (never fetched), else download
     /// fails. Orthogonal to [`Role`].
     pub url: Option<String>,
+    /// `true` when `url` is the Mojang-default fallback for a url-less library,
+    /// not an explicit metadata source. Lets the downloader report the full chain
+    /// on failure.
+    pub url_is_fallback: bool,
     /// Expected SHA-1, or `None` to skip verification (empty hash).
     pub sha1: Option<String>,
     /// Declared size in bytes, if known.

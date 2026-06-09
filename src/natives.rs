@@ -215,6 +215,7 @@ mod tests {
         let record = ArtifactRecord {
             coordinate: "g:a:1".to_owned(),
             url: None,
+            url_is_fallback: false,
             sha1: None,
             size: None,
             local_path: PathBuf::new(),
@@ -237,6 +238,7 @@ mod tests {
         let record = ArtifactRecord {
             coordinate: "net.java.jinput:jinput-platform:2.0.5:natives-linux".to_owned(),
             url: None,
+            url_is_fallback: false,
             sha1: None,
             size: None,
             local_path: jar.clone(),

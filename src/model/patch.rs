@@ -38,6 +38,10 @@ pub struct Patch {
     /// Asset index reference; set by the Minecraft component.
     #[serde(default)]
     pub asset_index: Option<AssetIndexRef>,
+    /// log4j2 configuration; set by the Minecraft component. Drives the
+    /// `Log4Shell` mitigation arg on affected versions.
+    #[serde(default)]
+    pub logging: Option<Logging>,
 
     /// Legacy game-arg string (=<1.12). Mutually exclusive in practice with
     /// [`Patch::arguments`]; the two forms are never merged.
@@ -257,6 +261,39 @@ pub struct JavaVersion {
     pub major_version: Option<u32>,
     #[serde(default)]
     pub component: Option<String>,
+}
+
+/// The log4j2 config a component (the Minecraft one) declares, driving the
+/// `Log4Shell` mitigation for affected versions (1.7 to 1.18). We download the
+/// official `file`, patch its console layout for headless output (see `assets`),
+/// and pass `argument` (with `${path}` -> the config's local path) as a JVM arg.
+///
+/// Prism's component format flattens this (no Mojang `{ "client": {...} }`
+/// wrapper), the shape both the meta server and local patches use.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct Logging {
+    /// The JVM arg template, e.g. `-Dlog4j.configurationFile=${path}`.
+    #[serde(default)]
+    pub argument: Option<String>,
+    /// The config file to download.
+    #[serde(default)]
+    pub file: Option<LoggingFile>,
+    /// Config format tag (`log4j2-xml`); advisory only.
+    #[serde(default, rename = "type")]
+    pub config_type: Option<String>,
+}
+
+/// The downloadable log4j config file referenced by [`Logging`].
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct LoggingFile {
+    /// File name on disk (e.g. `client-1.7.xml`).
+    pub id: String,
+    #[serde(default)]
+    pub sha1: Option<String>,
+    #[serde(default)]
+    pub size: Option<u64>,
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 /// The asset index reference declared by the Minecraft component.

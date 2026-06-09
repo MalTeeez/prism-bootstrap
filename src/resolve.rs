@@ -1,11 +1,13 @@
 //! Artifact resolution - turn a merged `Profile` into `ArtifactRecord`s.
 //!
 //! For each kept library/mavenFile/mainJar this decides the [`Role`], computes
-//! the maven `local_path`, and attaches the download `url`. Crucially the path
-//! and url come from the same function so they can never drift: only the
-//! bare-`name`+`url` variant derives a url, and everything carrying an explicit
-//! `downloads.*.url` uses it verbatim - deriving a SNAPSHOT url from the
-//! (resolved-version) `name` would be wrong.
+//! the maven `local_path`, and attaches the download `url`. The path and url come
+//! from the same function so they can never drift: the url-deriving variants
+//! (bare `name` plus a `url` base, or a url-less non-local entry defaulting to the
+//! Mojang libraries server) build both from one relative path, while an explicit
+//! `downloads.*.url` is used verbatim (deriving a SNAPSHOT url from the
+//! resolved-version `name` would be wrong). Only `MMC-hint: "local"` jars stay
+//! url-less.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -18,6 +20,11 @@ use crate::model::patch::{Library, MainJar};
 use crate::model::profile::Profile;
 use crate::platform::Ctx;
 use crate::rules::allowed;
+
+/// Fallback download root for a url-less library, matching MultiMC/Prism (which
+/// default an empty repository url to this). Forge lists libraries like
+/// `net.minecraft:launchwrapper:1.12` by bare name, expecting it here.
+const MOJANG_LIBRARIES_BASE: &str = "https://libraries.minecraft.net";
 
 /// Resolve a merged profile into the artifact records the IO stages consume.
 ///
@@ -101,6 +108,7 @@ fn classify_library(
         return Ok(Some(ArtifactRecord {
             coordinate: library.name.clone(),
             url: Some(url.clone()),
+            url_is_fallback: false,
             sha1: normalize_sha1(artifact.sha1.as_deref()),
             size: artifact.size,
             local_path,
@@ -116,6 +124,7 @@ fn classify_library(
         return Ok(Some(ArtifactRecord {
             coordinate: library.name.clone(),
             url: Some(url),
+            url_is_fallback: false,
             sha1: None,
             size: None,
             local_path,
@@ -124,20 +133,30 @@ fn classify_library(
         }));
     }
 
-    // (d) no resolvable url -> assume-local (url: None); download asserts it on
-    // disk and never fetches it. It is still used on the classpath - the
-    // absent url, not the role, marks it assume-local.
-    // `MMC-hint: "local"` jars live flat in the instance's libraries dir
-    // (matching MultiMC/Prism - confirmed against a real launch log), not under
-    // the maven layout the downloaded libs use.
-    let local_path = if library.mmc_hint.as_deref() == Some("local") {
-        libraries_dir.join(maven_filename(&library.name)?)
-    } else {
-        local_path
-    };
+    // (d) `MMC-hint: "local"` -> assume-local (url None), on the classpath but
+    // never fetched; download asserts it on disk. These jars live flat in the
+    // instance's libraries dir (matching MultiMC/Prism), not on the maven layout.
+    if library.mmc_hint.as_deref() == Some("local") {
+        return Ok(Some(ArtifactRecord {
+            coordinate: library.name.clone(),
+            url: None,
+            url_is_fallback: false,
+            sha1: None,
+            size: None,
+            local_path: libraries_dir.join(maven_filename(&library.name)?),
+            role: Role::Classpath,
+            extract_exclude: Vec::new(),
+        }));
+    }
+
+    // (e) bare `name`, no url, no hint -> derive the url from the Mojang libraries
+    // server (the MultiMC/Prism default). Forge lists libraries like
+    // `net.minecraft:launchwrapper:1.12` this way.
+    let url = format!("{MOJANG_LIBRARIES_BASE}/{}", maven_relative_path(&library.name)?);
     Ok(Some(ArtifactRecord {
         coordinate: library.name.clone(),
-        url: None,
+        url: Some(url),
+        url_is_fallback: true,
         sha1: None,
         size: None,
         local_path,
@@ -181,6 +200,7 @@ fn classify_legacy_native(
         library.extract.as_ref().map_or_else(Vec::new, |extract| extract.exclude.clone());
     Ok(Some(ArtifactRecord {
         url: artifact.url.as_ref().filter(|url| !url.is_empty()).cloned(),
+        url_is_fallback: false,
         sha1: normalize_sha1(artifact.sha1.as_deref()),
         size: artifact.size,
         local_path,
@@ -204,6 +224,7 @@ fn classify_main_jar(main_jar: &MainJar, instance_dir: &Path) -> Result<Artifact
     Ok(ArtifactRecord {
         coordinate: main_jar.name.clone(),
         url: artifact.and_then(|a| a.url.clone()).filter(|url| !url.is_empty()),
+        url_is_fallback: false,
         sha1: normalize_sha1(artifact.and_then(|a| a.sha1.as_deref())),
         size: artifact.and_then(|a| a.size),
         local_path,
@@ -272,30 +293,41 @@ struct Coordinate<'a> {
     artifact: &'a str,
     version: &'a str,
     classifier: Option<&'a str>,
+    /// File extension (`jar` unless an `@ext` suffix set otherwise).
+    extension: &'a str,
 }
 
 impl Coordinate<'_> {
-    /// The jar filename: `artifact-version[-classifier].jar`.
+    /// The filename: `artifact-version[-classifier].<extension>`.
     fn filename(&self) -> String {
         match self.classifier {
-            Some(classifier) => format!("{}-{}-{classifier}.jar", self.artifact, self.version),
-            None => format!("{}-{}.jar", self.artifact, self.version),
+            Some(classifier) => {
+                format!("{}-{}-{classifier}.{}", self.artifact, self.version, self.extension)
+            }
+            None => format!("{}-{}.{}", self.artifact, self.version, self.extension),
         }
     }
 }
 
-/// Split `group:artifact:version[:classifier]` into its parts.
+/// Split `group:artifact:version[:classifier][@extension]` into its parts. An
+/// optional `@ext` suffix (e.g. `@zip`) overrides the default `jar`, stripped
+/// before the `:` split since it applies to the whole coordinate.
 fn parse_coordinate(name: &str) -> Result<Coordinate<'_>> {
-    let parts: Vec<&str> = name.split(':').collect();
+    let (coordinate, extension) = match name.split_once('@') {
+        Some((coordinate, extension)) => (coordinate, extension),
+        None => (name, "jar"),
+    };
+    let parts: Vec<&str> = coordinate.split(':').collect();
     match parts.as_slice() {
         [group, artifact, version] => {
-            Ok(Coordinate { group, artifact, version, classifier: None })
+            Ok(Coordinate { group, artifact, version, classifier: None, extension })
         }
         [group, artifact, version, classifier] => {
-            Ok(Coordinate { group, artifact, version, classifier: Some(classifier) })
+            Ok(Coordinate { group, artifact, version, classifier: Some(classifier), extension })
         }
         _ => bail!(
-            "invalid maven coordinate {name:?}: expected group:artifact:version[:classifier]"
+            "invalid maven coordinate {name:?}: expected \
+             group:artifact:version[:classifier][@extension]"
         ),
     }
 }
@@ -345,6 +377,20 @@ mod tests {
         assert_eq!(
             maven_coordinate_to_path("com.mojang:minecraft:1.7.10:client").unwrap(),
             Path::new("com/mojang/minecraft/1.7.10/minecraft-1.7.10-client.jar")
+        );
+    }
+
+    #[test]
+    fn coordinate_to_path_honors_extension_suffix() {
+        // An `@ext` suffix overrides the default `jar`, with and without a
+        // classifier (e.g. Forge's `...@zip` data coordinates).
+        assert_eq!(
+            maven_coordinate_to_path("de.oceanlabs.mcp:mcp_config:1.16.5@zip").unwrap(),
+            Path::new("de/oceanlabs/mcp/mcp_config/1.16.5/mcp_config-1.16.5.zip")
+        );
+        assert_eq!(
+            maven_coordinate_to_path("net.minecraftforge:forge:1.16.5:universal@zip").unwrap(),
+            Path::new("net/minecraftforge/forge/1.16.5/forge-1.16.5-universal.zip")
         );
     }
 
@@ -429,18 +475,23 @@ mod tests {
     }
 
     #[test]
-    fn no_url_without_local_hint_keeps_maven_path() {
-        // A url-less entry that is *not* MMC-hint:local stays on the maven layout
-        // (the flat placement is specific to the local hint), still classpath +
-        // assume-local.
-        let bare = library(r#"{ "name": "org.example:thing:1.0" }"#);
+    fn no_url_without_local_hint_defaults_to_mojang_libraries() {
+        // A url-less entry that is *not* MMC-hint:local defaults to the Mojang
+        // libraries server (the MultiMC/Prism fallback) on the maven layout - e.g.
+        // Forge's bare net.minecraft:launchwrapper:1.12 entry.
+        let bare = library(r#"{ "name": "net.minecraft:launchwrapper:1.12" }"#);
         let ctx = expand_platform(Platform::Linux);
         let record = classify_library(&bare, &ctx, Path::new("/inst/libraries"))
             .unwrap()
             .unwrap();
         assert_eq!(record.role, Role::Classpath);
-        assert_eq!(record.url, None);
-        assert!(record.local_path.ends_with("org/example/thing/1.0/thing-1.0.jar"));
+        assert_eq!(
+            record.url.as_deref(),
+            Some("https://libraries.minecraft.net/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar")
+        );
+        assert!(record.local_path.ends_with(
+            "net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar"
+        ));
     }
 
     #[test]

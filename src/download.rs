@@ -160,11 +160,26 @@ async fn download_one(
         .await
         .map_err(|reason| FatalError::DownloadFailed {
             coordinate: record.coordinate.clone(),
-            reason,
+            reason: download_failure_reason(record, reason),
         })?;
     write_atomic(&record.local_path, &bytes)
         .await
         .with_context(|| format!("writing {}", record.local_path.display()))
+}
+
+/// The failure `reason` for a fetch. A fallback url (the Mojang default for a
+/// library that named none) reports the full chain we tried; an explicit url
+/// keeps its own message.
+fn download_failure_reason(record: &ArtifactRecord, reason: String) -> String {
+    if record.url_is_fallback {
+        format!(
+            "has no specified download url, is not present locally at {}, \
+             and was not found at Mojang's library server: {reason}",
+            record.local_path.display()
+        )
+    } else {
+        reason
+    }
 }
 
 /// Assert an assume-local (url-less) artifact is present. On a real run a
@@ -250,6 +265,7 @@ impl Fetcher for Downloader {
         let record = ArtifactRecord {
             coordinate: label.to_owned(),
             url: Some(url.to_owned()),
+            url_is_fallback: false,
             sha1: None,
             size: None,
             local_path: PathBuf::new(),
@@ -406,6 +422,7 @@ mod tests {
         ArtifactRecord {
             coordinate: "g:a:1".to_owned(),
             url: Some("http://127.0.0.1:0/never".to_owned()),
+            url_is_fallback: false,
             sha1: sha1.map(str::to_owned),
             size,
             local_path: path,
@@ -473,6 +490,30 @@ mod tests {
         assert!(assert_local(&rec, true).is_ok());
     }
 
+    #[test]
+    fn fallback_url_failure_spells_out_the_whole_chain() {
+        // A url-less library defaulted to Mojang's server: a failed fetch must
+        // read as the full chain (no url, not local, not on Mojang), not a bare
+        // HTTP error on a url the user never specified.
+        let mut rec = record(Role::Classpath, PathBuf::from("/inst/libraries/lw.jar"), None, None);
+        rec.url_is_fallback = true;
+        let reason = download_failure_reason(&rec, "HTTP 404 Not Found".to_owned());
+        assert!(reason.contains("has no specified download url"), "got: {reason}");
+        assert!(reason.contains("/inst/libraries/lw.jar"), "got: {reason}");
+        assert!(reason.contains("Mojang"), "got: {reason}");
+        assert!(reason.contains("HTTP 404 Not Found"), "got: {reason}");
+    }
+
+    #[test]
+    fn explicit_url_failure_keeps_the_underlying_reason_verbatim() {
+        // An explicit-url artifact already names its source; don't dress it up.
+        let rec = record(Role::Classpath, PathBuf::from("/inst/libraries/lib.jar"), None, None);
+        assert_eq!(
+            download_failure_reason(&rec, "HTTP 500 Server Error".to_owned()),
+            "HTTP 500 Server Error"
+        );
+    }
+
     #[tokio::test]
     async fn dry_run_does_no_network_for_normal_artifacts() {
         // The url points nowhere; dry-run must return before touching it.
@@ -511,6 +552,7 @@ mod tests {
         ArtifactRecord {
             coordinate: coordinate.to_owned(),
             url: Some(url.to_owned()),
+            url_is_fallback: false,
             sha1: Some(sha1.to_owned()),
             size: Some(size),
             local_path: dir.join(format!("{}.jar", coordinate.replace(':', "_"))),

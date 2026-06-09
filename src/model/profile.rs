@@ -6,7 +6,7 @@
 //! after.
 
 use crate::model::patch::{
-    AssetIndexRef, Agent, ArgEntry, Dependency, Library, MainJar,
+    AssetIndexRef, Agent, ArgEntry, Dependency, Library, Logging, MainJar,
 };
 
 /// The game-argument form in effect for a profile. The legacy and modern forms
@@ -37,6 +37,9 @@ pub struct Profile {
     pub main_jar: Option<MainJar>,
     /// Asset index; set by the Minecraft component.
     pub asset_index: Option<AssetIndexRef>,
+    /// log4j2 config; last-wins (set by the Minecraft component). Drives the
+    /// `Log4Shell` mitigation arg.
+    pub logging: Option<Logging>,
     /// Active game-arg form (see [`GameArgs`]).
     pub game_args: GameArgs,
     /// `+jvmArgs`, accumulated and kept pre-tokenized.

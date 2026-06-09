@@ -124,6 +124,7 @@ pub fn assemble(
     jvm.append_agents(profile, instance)?;
     jvm.inject_heap(config);
     jvm.inject_library_path(instance, has_native_extracts);
+    jvm.inject_logging(profile, instance);
     jvm.inject_headless(instance, config);
 
     let game = build_game_args(profile, ctx, &subs);
@@ -303,6 +304,18 @@ impl JvmAssembly {
         }
         let natives = instance.join("natives");
         self.args.push(format!("-Djava.library.path={}", natives.to_string_lossy()));
+    }
+
+    /// Add the component's `logging.argument` as the `Log4Shell` mitigation arg,
+    /// with `${path}` replaced by the downloaded (and patched) config's local path.
+    /// A no-op unless the profile has a logging config with an `argument` and `file`.
+    fn inject_logging(&mut self, profile: &Profile, instance: &Path) {
+        let Some(logging) = &profile.logging else { return };
+        let (Some(argument), Some(file)) = (&logging.argument, &logging.file) else {
+            return;
+        };
+        let path = crate::assets::log_config_path(instance, &file.id);
+        self.args.push(argument.replace("${path}", &path.to_string_lossy()));
     }
 
     /// `--headless` internals: pin LWJGL's native-extract dir to a
@@ -544,6 +557,44 @@ mod tests {
             argv.iter()
                 .any(|arg| arg.starts_with("-Dorg.lwjgl.system.SharedLibraryExtractDirectory="))
         );
+    }
+
+    #[test]
+    fn logging_config_arg_points_at_the_asset_store_path() {
+        use crate::model::patch::{Logging, LoggingFile};
+
+        // A profile carrying a log4j config: assembly must emit the argument with
+        // `${path}` -> the on-disk config path the downloader uses.
+        let mut profile = Profile::default();
+        profile.main_class = Some("Main".to_owned());
+        profile.logging = Some(Logging {
+            argument: Some("-Dlog4j.configurationFile=${path}".to_owned()),
+            file: Some(LoggingFile {
+                id: "client-1.7.xml".to_owned(),
+                sha1: None,
+                size: None,
+                url: None,
+            }),
+            config_type: Some("log4j2-xml".to_owned()),
+        });
+        let ctx = expand_platform(Platform::Linux);
+        let argv = assemble(&profile, &ctx, &[], Path::new("/inst"), &test_config()).unwrap();
+
+        assert!(
+            argv.iter()
+                .any(|arg| arg == "-Dlog4j.configurationFile=/inst/assets/log_configs/client-1.7.xml"),
+            "expected the substituted log4j arg, got: {argv:?}"
+        );
+    }
+
+    #[test]
+    fn no_logging_config_emits_no_log4j_arg() {
+        // A profile without a logging block must not invent a log4j arg.
+        let mut profile = Profile::default();
+        profile.main_class = Some("Main".to_owned());
+        let ctx = expand_platform(Platform::Linux);
+        let argv = assemble(&profile, &ctx, &[], Path::new("/inst"), &test_config()).unwrap();
+        assert!(!argv.iter().any(|arg| arg.contains("log4j.configurationFile")));
     }
 
     #[test]

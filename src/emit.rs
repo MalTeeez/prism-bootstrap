@@ -223,6 +223,7 @@ mod tests {
         ArtifactRecord {
             coordinate: coordinate.to_owned(),
             url: Some("https://example/lib.jar".to_owned()),
+            url_is_fallback: false,
             sha1: Some("abc".to_owned()),
             size: Some(1),
             local_path: PathBuf::from("/inst/libraries/lib.jar"),

@@ -33,6 +33,7 @@ The initial idea for the usage of this tool was setting up mc for headless ci in
 Therefore the `--headless` option (when provided) generates a simple launch.env with
 the environment variables required when running with `xvfb-run` (and some other niceties).
 
+#### If you want to test this: 
 Other system packages that are required for running with `xvfb-run` (on debian at least):
 - `xvfb`
 - `libgl1-mesa-dri`
@@ -42,10 +43,15 @@ Other system packages that are required for running with `xvfb-run` (on debian a
 
 Then, after bootstrapping your instance, go into .minecraft and run:
 
-`bash -c 'env $(grep -v "^\\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "$(head -1 ../launch.argv)" @<(tail -n +2 ../launch.argv)' > logs/log.txt 2>&1 &`
-> (bash -c in case of other shells)
+#### For java 9+
+`bash -c 'env $(grep -v "^\\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "$(head -1 ../launch.argv)" @<(tail -n +2 ../launch.argv)' > headless.log.txt 2>&1 &`
 
-> (grep before env to allow comments)
+#### For java -8
+`bash -c 'mapfile -t argv < ../launch.argv; env $(grep -v "^\s*#" ../launch.env | xargs) xvfb-run -n 99 -f ./xvfb.auth -s "-screen 0 854x480x24" "${argv[0]}" "${argv[@]:1}"' > headless.log 2>&1 &`
+
+> bash -c in case of other shells
+
+> grep before env to allow comments
 
 And then to check if it worked (after a short while):
 
@@ -55,6 +61,8 @@ And then to check if it worked (after a short while):
 If you want to get a recording of the startup, you can use the script at `record_start.sh` - it needs these packages (debian):
 - ffmpeg
 - fonts-dejavu-core
+- python3-xlib
+- xdotool
 
 ## How it works
 

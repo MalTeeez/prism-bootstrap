@@ -565,18 +565,20 @@ mod tests {
 
         // A profile carrying a log4j config: assembly must emit the argument with
         // `${path}` -> the on-disk config path the downloader uses.
-        let mut profile = Profile::default();
-        profile.main_class = Some("Main".to_owned());
-        profile.logging = Some(Logging {
-            argument: Some("-Dlog4j.configurationFile=${path}".to_owned()),
-            file: Some(LoggingFile {
-                id: "client-1.7.xml".to_owned(),
-                sha1: None,
-                size: None,
-                url: None,
+        let profile = Profile {
+            main_class: Some("Main".to_owned()),
+            logging: Some(Logging {
+                argument: Some("-Dlog4j.configurationFile=${path}".to_owned()),
+                file: Some(LoggingFile {
+                    id: "client-1.7.xml".to_owned(),
+                    sha1: None,
+                    size: None,
+                    url: None,
+                }),
+                config_type: Some("log4j2-xml".to_owned()),
             }),
-            config_type: Some("log4j2-xml".to_owned()),
-        });
+            ..Default::default()
+        };
         let ctx = expand_platform(Platform::Linux);
         let argv = assemble(&profile, &ctx, &[], Path::new("/inst"), &test_config()).unwrap();
 
@@ -590,8 +592,10 @@ mod tests {
     #[test]
     fn no_logging_config_emits_no_log4j_arg() {
         // A profile without a logging block must not invent a log4j arg.
-        let mut profile = Profile::default();
-        profile.main_class = Some("Main".to_owned());
+        let profile = Profile {
+            main_class: Some("Main".to_owned()),
+            ..Default::default()
+        };
         let ctx = expand_platform(Platform::Linux);
         let argv = assemble(&profile, &ctx, &[], Path::new("/inst"), &test_config()).unwrap();
         assert!(!argv.iter().any(|arg| arg.contains("log4j.configurationFile")));

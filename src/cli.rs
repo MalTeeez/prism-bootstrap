@@ -60,7 +60,7 @@ pub struct Args {
 
     /// Extra JVM argument injected right after `-Xmx`. Repeatable; each
     /// occurrence becomes its own token (and its own line in `launch.argv`).
-    #[arg(long, value_name = "ARG")]
+    #[arg(long, value_name = "ARG", allow_hyphen_values = true)]
     pub jvm_arg: Vec<String>,
 
     /// JDK to put in the command. Default: auto-select by `compatibleJavaMajors`

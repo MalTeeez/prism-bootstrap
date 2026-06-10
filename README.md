@@ -138,6 +138,10 @@ meta resolution failed.
 ## unit tests
 
 ```
-cargo test               # fully offline
-cargo test -- --ignored  # wet tests: needs network
+# test
+cargo test
+# wet tests: needs network
+cargo test -- --ignored
+# lint
+cargo clippy --all-targets
 ```

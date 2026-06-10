@@ -32,6 +32,8 @@ pub struct Config {
     pub xms: String,
     /// `-Xmx` value (e.g. `6144m`).
     pub xmx: String,
+    /// Extra JVM args injected verbatim right after `-Xmx`.
+    pub jvm_args: Vec<String>,
     /// `${auth_player_name}`.
     pub username: String,
     /// `${auth_uuid}`.
@@ -290,10 +292,12 @@ impl JvmAssembly {
         Ok(())
     }
 
-    /// Inject the tool-supplied heap (`-Xms`/`-Xmx`) - never from patches.
+    /// Inject the tool-supplied heap (`-Xms`/`-Xmx`) - never from patches -
+    /// followed by any user-supplied extra JVM args, kept in order.
     fn inject_heap(&mut self, config: &Config) {
         self.args.push(format!("-Xms{}", config.xms));
         self.args.push(format!("-Xmx{}", config.xmx));
+        self.args.extend(config.jvm_args.iter().cloned());
     }
 
     /// Add `-Djava.library.path=<instance>/natives` unless the jvm args already
@@ -423,6 +427,7 @@ mod tests {
             java: PathBuf::from("/jdk/bin/java"),
             xms: "512m".to_owned(),
             xmx: "6144m".to_owned(),
+            jvm_args: Vec::new(),
             username: "CI".to_owned(),
             uuid: "00000000-0000-0000-0000-000000000000".to_owned(),
             access_token: "0".to_owned(),
@@ -507,6 +512,23 @@ mod tests {
             classpath.contains("libraries/lwjgl3ify-3.0.23-forgePatches.jar"),
             "forgePatches (no-url local) must still be on the classpath: {classpath}"
         );
+    }
+
+    #[test]
+    fn extra_jvm_args_follow_xmx_in_order() {
+        let patches = load_instance(Path::new("example-files/lwjgl3ify-variant")).unwrap();
+        let profile = merge(&patches);
+        let ctx = expand_platform(Platform::Linux);
+        let instance = Path::new("/inst");
+        let records = resolve(&profile, &ctx, instance).unwrap();
+
+        let mut config = test_config();
+        config.jvm_args = vec!["-XX:+UseG1GC".to_owned(), "-Dfoo=bar".to_owned()];
+        let argv = assemble(&profile, &ctx, &records, instance, &config).unwrap();
+
+        // The two extra args sit directly after `-Xmx`, preserving CLI order.
+        let xmx_index = argv.iter().position(|arg| arg == "-Xmx6144m").unwrap();
+        assert_eq!(&argv[xmx_index + 1..xmx_index + 3], ["-XX:+UseG1GC", "-Dfoo=bar"]);
     }
 
     #[test]

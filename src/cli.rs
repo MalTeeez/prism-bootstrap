@@ -58,6 +58,11 @@ pub struct Args {
     #[arg(long, default_value = "6144m")]
     pub xmx: String,
 
+    /// Extra JVM argument injected right after `-Xmx`. Repeatable; each
+    /// occurrence becomes its own token (and its own line in `launch.argv`).
+    #[arg(long, value_name = "ARG")]
+    pub jvm_arg: Vec<String>,
+
     /// JDK to put in the command. Default: auto-select by `compatibleJavaMajors`
     /// from `PATH`.
     #[arg(long, value_name = "PATH")]

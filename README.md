@@ -23,7 +23,8 @@ prism-bootstrap <instance-dir> --platform <token> [options]
   it to stop after printing the merged-profile summary.
 
 Common options: `--meta-url <url>` (resolve pack-only instances, see below),
-`--xms`/`--xmx` (heap), `--headless`, `--jobs <n>`, `--java <path>`,
+`--xms`/`--xmx` (heap), `--jvm-arg <arg>` (extra JVM arg after `-Xmx`,
+repeatable), `--headless`, `--jobs <n>`, `--java <path>`,
 `--game-dir <path>`, `--emit <path>`, `--no-verify`, `--dry-run`, and the
 dummy-auth flags (`--username`/`--uuid`/`--access-token`/`--user-type`).
 

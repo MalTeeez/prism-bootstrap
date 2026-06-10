@@ -135,6 +135,7 @@ fn assemble_config(args: &cli::Args, instance: &std::path::Path, java: std::path
         java,
         xms: args.xms.clone(),
         xmx: args.xmx.clone(),
+        jvm_args: args.jvm_arg.clone(),
         username: args.username.clone(),
         uuid: args.uuid.clone(),
         access_token: args.access_token.clone(),
